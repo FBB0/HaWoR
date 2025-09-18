@@ -19,12 +19,11 @@ from dataclasses import dataclass
 import logging
 
 # Add HaWoR to path
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from hawor_interface import HaWoRInterface
 from lib.models.hawor import HAWOR
-from lib.utils.geometry import rot6d_to_rotmat, angle_axis_to_rotation_matrix
-from lib.utils.rotation import rotation_matrix_to_angle_axis
+from lib.utils.geometry import rot6d_to_rotmat, rotation_matrix_to_angle_axis
 
 @dataclass
 class ArcticEvaluationMetrics:
@@ -255,10 +254,15 @@ class ArcticLossFunction:
         
         # Compute weighted total loss
         total_loss = torch.tensor(0.0, device=next(iter(losses.values())).device)
+        weighted_losses = {}
         for loss_name, loss_value in losses.items():
             weight = self.loss_weights.get(loss_name.upper(), 1.0)
-            total_loss += weight * loss_value
-            losses[f'weighted_{loss_name}'] = weight * loss_value
+            weighted_value = weight * loss_value
+            total_loss += weighted_value
+            weighted_losses[f'weighted_{loss_name}'] = weighted_value
+        
+        # Add weighted losses to the original losses dict
+        losses.update(weighted_losses)
         
         return total_loss, losses
 
