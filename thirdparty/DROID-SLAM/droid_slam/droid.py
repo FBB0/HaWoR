@@ -57,7 +57,14 @@ class Droid:
         state_dict["update.delta.2.bias"] = state_dict["update.delta.2.bias"][:2]
 
         self.net.load_state_dict(state_dict)
-        self.net.to("cuda:0").eval()
+        # Auto-detect best available device
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+        self.net.to(device).eval()
 
     def track(self, tstamp, image, depth=None, intrinsics=None, mask=None):
         """ main thread - update map """

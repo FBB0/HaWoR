@@ -9,7 +9,16 @@ import geom.projective_ops as pops
 from glob import glob
 
 class FactorGraph:
-    def __init__(self, video, update_op, device="cuda:0", corr_impl="volume", max_factors=-1, upsample=False):
+    def __init__(self, video, update_op, device=None, corr_impl="volume", max_factors=-1, upsample=False):
+        # Auto-detect device if not specified
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda:0"
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        
         self.video = video
         self.update_op = update_op
         self.device = device

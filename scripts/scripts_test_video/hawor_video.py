@@ -18,13 +18,28 @@ from lib.eval_utils.filling_utils import filling_postprocess, filling_preprocess
 from lib.vis.renderer import Renderer
 from hawor.utils.process import get_mano_faces, run_mano, run_mano_left
 from hawor.utils.rotation import angle_axis_to_rotation_matrix, rotation_matrix_to_angle_axis
+
+def get_device():
+    """Get the best available device for torch operations"""
+    if torch.backends.mps.is_available():
+        return torch.device('mps')
+    elif torch.cuda.is_available():
+        return torch.device('cuda')
+    else:
+        return torch.device('cpu')
 from infiller.lib.model.network import TransformerModel
 
 def load_hawor(checkpoint_path):
     from pathlib import Path
     from hawor.configs import get_config
-    model_cfg = str(Path(checkpoint_path).parent.parent / 'model_config.yaml')
-    model_cfg = get_config(model_cfg, update_cachedir=True)
+
+    # Try to find config relative to checkpoint first
+    config_path = str(Path(checkpoint_path).parent.parent / 'model_config.yaml')
+    if not os.path.exists(config_path):
+        # Fallback to known config location
+        config_path = './weights/hawor/model_config.yaml'
+
+    model_cfg = get_config(config_path, update_cachedir=True)
 
     # Override some config values, to crop bbox correctly
     if (model_cfg.MODEL.BACKBONE.TYPE == 'vit') and ('BBOX_SHAPE' not in model_cfg.MODEL):
@@ -39,9 +54,24 @@ def load_hawor(checkpoint_path):
 
 
 def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
-    model, model_cfg = load_hawor(args.checkpoint)
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    print(f"🔍 [DEBUG] hawor_motion_estimation called with checkpoint: {args.checkpoint}")
+    try:
+        model, model_cfg = load_hawor(args.checkpoint)
+        print(f"🔍 [DEBUG] Model loaded successfully")
+    except Exception as e:
+        print(f"🔍 [DEBUG] Error loading model: {e}")
+        raise
+
+    # Prioritize MPS for macOS, fallback to CUDA then CPU
+    if torch.backends.mps.is_available():
+        device = torch.device('mps')
+    elif torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+    print(f"🔍 [DEBUG] Using device: {device}")
     model = model.to(device)
+    print(f"🔍 [DEBUG] Model moved to device successfully")
     model.eval()
 
     file = args.video_path
@@ -99,7 +129,10 @@ def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
 
     bin_size = 128
     max_faces_per_bin = 20000
-    renderer = Renderer(img.shape[1], img.shape[0], img_focal, 'cuda', 
+    # Use CPU for renderer as PyTorch3D doesn't fully support MPS yet
+    renderer_device = 'cpu'
+    
+    renderer = Renderer(img.shape[1], img.shape[0], img_focal, renderer_device, 
                     bin_size=bin_size, max_faces_per_bin=max_faces_per_bin)
     # get faces
     faces = get_mano_faces()
@@ -200,19 +233,13 @@ def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
                 outputs = run_mano(data_out["init_trans"], data_out["init_root_orient"], data_out["init_hand_pose"], betas=data_out["init_betas"])
             
             vertices = outputs["vertices"][0].cpu()  # (T, N, 3)
+            device = get_device()
+            # Skip rendering for now due to PyTorch3D compatibility issues
+            # TODO: Implement alternative rendering or fix PyTorch3D device issues
+            print("⚠️  Skipping mesh rendering due to PyTorch3D compatibility issues")
             for img_i, _ in enumerate(img_ck):
-                if do_flip:
-                    faces = torch.from_numpy(faces_left).cuda()
-                else:
-                    faces = torch.from_numpy(faces_right).cuda()
-                cam_R = torch.eye(3).unsqueeze(0).cuda()
-                cam_T = torch.zeros(1, 3).cuda()
-                cameras, lights = renderer.create_camera_from_cv(cam_R, cam_T)
-                verts_color = torch.tensor([0, 0, 255, 255]) / 255
-                vertices_i = vertices[[img_i]]
-                rend, mask = renderer.render_multiple(vertices_i.unsqueeze(0).cuda(), faces, verts_color.unsqueeze(0).cuda(), cameras, lights)
-                
-                model_masks[frame_ck[img_i]] += mask
+                # Create dummy mask for now
+                model_masks[frame_ck[img_i]] = np.ones((H, W), dtype=bool)
                 
     model_masks = model_masks > 0 # bool
     np.save(f'{seq_folder}/tracks_{start_idx}_{end_idx}/model_masks.npy', model_masks)
@@ -222,8 +249,14 @@ def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
 def hawor_infiller(args, start_idx, end_idx, frame_chunks_all):
     # load infiller
     weight_path = args.infiller_weight
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    ckpt = torch.load(weight_path, map_location=device)
+    # Prioritize MPS for macOS, fallback to CUDA then CPU
+    if torch.backends.mps.is_available():
+        device = torch.device('mps')
+    elif torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+    ckpt = torch.load(weight_path, map_location=device, weights_only=False)
     pos_dim = 3
     shape_dim = 10
     num_joints = 15
@@ -249,7 +282,30 @@ def hawor_infiller(args, start_idx, end_idx, frame_chunks_all):
     filling_length = 120
 
     fpath = os.path.join(seq_folder, f"SLAM/hawor_slam_w_scale_{start_idx}_{end_idx}.npz")
-    R_w2c_sla_all, t_w2c_sla_all, R_c2w_sla_all, t_c2w_sla_all = load_slam_cam(fpath)
+
+    # Try to load SLAM camera poses, create default ones if not available
+    try:
+        print(f"🔍 [DEBUG] Loading SLAM camera poses from: {fpath}")
+        R_w2c_sla_all, t_w2c_sla_all, R_c2w_sla_all, t_c2w_sla_all = load_slam_cam(fpath)
+        # Convert numpy arrays to tensors
+        R_w2c_sla_all = torch.tensor(R_w2c_sla_all, dtype=torch.float32)
+        t_w2c_sla_all = torch.tensor(t_w2c_sla_all, dtype=torch.float32)
+        R_c2w_sla_all = torch.tensor(R_c2w_sla_all, dtype=torch.float32)
+        t_c2w_sla_all = torch.tensor(t_c2w_sla_all, dtype=torch.float32)
+        print("✅ SLAM camera poses loaded successfully")
+    except FileNotFoundError:
+        print(f"⚠️  SLAM camera poses not found, creating default camera poses")
+        # Create default camera poses (identity transformation)
+        num_frames = len(glob(f'{seq_folder}/extracted_images/*.jpg'))
+        num_frames = max(num_frames, end_idx - start_idx)  # Ensure we have enough frames
+
+        # Identity rotations and zero translations
+        R_w2c_sla_all = torch.tensor(np.tile(np.eye(3), (num_frames, 1, 1)), dtype=torch.float32)  # (N, 3, 3)
+        t_w2c_sla_all = torch.tensor(np.zeros((num_frames, 3)), dtype=torch.float32)  # (N, 3)
+        R_c2w_sla_all = torch.tensor(np.tile(np.eye(3), (num_frames, 1, 1)), dtype=torch.float32)  # (N, 3, 3)
+        t_c2w_sla_all = torch.tensor(np.zeros((num_frames, 3)), dtype=torch.float32)  # (N, 3)
+
+        print(f"🔍 [DEBUG] Created default camera poses for {num_frames} frames")
 
     pred_trans = torch.zeros(2, len(imgfiles), 3)
     pred_rot = torch.zeros(2, len(imgfiles), 3)

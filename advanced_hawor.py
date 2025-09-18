@@ -13,9 +13,13 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 import joblib
 import yaml
+from glob import glob
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))
+
+# Apply PyTorch 2.8 compatibility fix for model loading
+import hawor_torch_fix
 
 try:
     # Try to import actual HaWoR components
@@ -140,13 +144,27 @@ class AdvancedHaWoR:
 
             # Step 2: Hand motion estimation
             print("Step 2: Estimating hand motion...")
-            frame_chunks_all, img_focal = hawor_motion_estimation(args, start_idx, end_idx, seq_folder)
+            try:
+                frame_chunks_all, img_focal = hawor_motion_estimation(args, start_idx, end_idx, seq_folder)
+                print("✅ Step 2 completed successfully")
+            except Exception as e:
+                print(f"❌ Error in Step 2 (hawor_motion_estimation): {e}")
+                import traceback
+                traceback.print_exc()
+                raise
 
             # Step 3: Motion infilling
             print("Step 3: Filling missing frames...")
-            pred_trans, pred_rot, pred_hand_pose, pred_betas, pred_valid = hawor_infiller(
-                args, start_idx, end_idx, frame_chunks_all
-            )
+            try:
+                pred_trans, pred_rot, pred_hand_pose, pred_betas, pred_valid = hawor_infiller(
+                    args, start_idx, end_idx, frame_chunks_all
+                )
+                print("✅ Step 3 completed successfully")
+            except Exception as e:
+                print(f"❌ Error in Step 3 (hawor_infiller): {e}")
+                import traceback
+                traceback.print_exc()
+                raise
 
             # Step 4: Process MANO meshes if available
             results = {

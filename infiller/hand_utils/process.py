@@ -3,7 +3,16 @@ from hand_utils.mano_wrapper import MANO
 from hand_utils.geometry_utils import aa_to_rotmat
 import numpy as np
 
-def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=True):
+def get_device():
+    """Get the best available device for torch operations"""
+    if torch.backends.mps.is_available():
+        return torch.device('mps')
+    elif torch.cuda.is_available():
+        return torch.device('cuda')
+    else:
+        return torch.device('cpu')
+
+def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=False):
     """
     Forward pass of the SMPL model and populates pred_data accordingly with
     joints3d, verts3d, points3d.
@@ -13,6 +22,7 @@ def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=
     body_pose : B x T x J*3
     betas : (optional) B x D
     """
+    print(f"🔍 [DEBUG] run_mano called with use_cuda={use_cuda}, trans.shape={trans.shape if hasattr(trans, 'shape') else 'unknown'}")
     MANO_cfg = {
         'DATA_DIR': '_DATA/data/',
         'MODEL_PATH': '_DATA/data/mano',
@@ -22,8 +32,16 @@ def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=
     }
     mano_cfg = {k.lower(): v for k,v in MANO_cfg.items()}
     mano = MANO(**mano_cfg)
+    print(f"🔍 [DEBUG] MANO model loaded, use_cuda={use_cuda}")
     if use_cuda:
-        mano = mano.cuda()
+        device = get_device()
+        print(f"🔍 [DEBUG] Moving MANO to device: {device}")
+        if device.type == 'mps':
+            mano = mano.to('mps')
+        elif device.type == 'cuda':
+            mano = mano.cuda()
+        else:
+            print(f"🔍 [DEBUG] Keeping MANO on CPU")
 
     B, T, _ = root_orient.shape
     NUM_JOINTS = 15
@@ -37,10 +55,19 @@ def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=
     rotmat_mano_params['hand_pose'] = aa_to_rotmat(mano_params['hand_pose']).view(B*T, NUM_JOINTS, 3, 3)
     rotmat_mano_params['transl'] = trans.reshape(B*T, 3)
 
+    print(f"🔍 [DEBUG] About to run MANO inference, use_cuda={use_cuda}")
     if use_cuda:
-        mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        device = get_device()
+        print(f"🔍 [DEBUG] Using device for inference: {device}")
+        if device.type == 'mps':
+            mano_output = mano(**{k: v.float().to('mps') for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        elif device.type == 'cuda':
+            mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        else:
+            mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
     else:
         mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+    print(f"🔍 [DEBUG] MANO inference completed successfully")
 
     faces_right = mano.faces
     faces_new = np.array([[92, 38, 234],
@@ -79,7 +106,7 @@ def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=
 
     return outputs
 
-def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=True, fix_shapedirs=True):
+def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=False, fix_shapedirs=True):
     """
     Forward pass of the SMPL model and populates pred_data accordingly with
     joints3d, verts3d, points3d.
@@ -99,8 +126,16 @@ def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_
     }
     mano_cfg = {k.lower(): v for k,v in MANO_cfg.items()}
     mano = MANO(**mano_cfg)
+    print(f"🔍 [DEBUG] MANO model loaded, use_cuda={use_cuda}")
     if use_cuda:
-        mano = mano.cuda()
+        device = get_device()
+        print(f"🔍 [DEBUG] Moving MANO to device: {device}")
+        if device.type == 'mps':
+            mano = mano.to('mps')
+        elif device.type == 'cuda':
+            mano = mano.cuda()
+        else:
+            print(f"🔍 [DEBUG] Keeping MANO on CPU")
     
     # fix MANO shapedirs of the left hand bug (https://github.com/vchoutas/smplx/issues/48)
     if fix_shapedirs:
@@ -118,10 +153,19 @@ def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_
     rotmat_mano_params['hand_pose'] = aa_to_rotmat(mano_params['hand_pose']).view(B*T, NUM_JOINTS, 3, 3)
     rotmat_mano_params['transl'] = trans.reshape(B*T, 3)
 
+    print(f"🔍 [DEBUG] About to run MANO inference, use_cuda={use_cuda}")
     if use_cuda:
-        mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        device = get_device()
+        print(f"🔍 [DEBUG] Using device for inference: {device}")
+        if device.type == 'mps':
+            mano_output = mano(**{k: v.float().to('mps') for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        elif device.type == 'cuda':
+            mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        else:
+            mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
     else:
         mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+    print(f"🔍 [DEBUG] MANO inference completed successfully")
 
     faces_right = mano.faces
     faces_new = np.array([[92, 38, 234],
@@ -160,7 +204,7 @@ def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_
 
     return outputs
 
-def run_mano_twohands(init_trans, init_rot, init_hand_pose, is_right, init_betas, use_cuda=True, fix_shapedirs=True):
+def run_mano_twohands(init_trans, init_rot, init_hand_pose, is_right, init_betas, use_cuda=False, fix_shapedirs=True):
     outputs_left = run_mano_left(init_trans[0:1], init_rot[0:1], init_hand_pose[0:1], None, init_betas[0:1], use_cuda=use_cuda, fix_shapedirs=fix_shapedirs)
     outputs_right = run_mano(init_trans[1:2], init_rot[1:2], init_hand_pose[1:2], None, init_betas[1:2], use_cuda=use_cuda)
     outputs_two = {

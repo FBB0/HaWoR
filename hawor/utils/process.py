@@ -47,10 +47,19 @@ def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=
     mano_cfg = {k.lower(): v for k,v in MANO_cfg.items()}
     mano = MANO(**mano_cfg)
     if use_cuda:
-        mano = mano.cuda()
+        if torch.backends.mps.is_available():
+            mano = mano.to('mps')
+        elif torch.cuda.is_available():
+            mano = mano.cuda()
+        # If neither is available, keep on CPU
 
     B, T, _ = root_orient.shape
     NUM_JOINTS = 15
+
+    # Handle None betas by creating default zero betas
+    if betas is None:
+        betas = torch.zeros(B, 10, device=root_orient.device)
+
     mano_params = {
         'global_orient': root_orient.reshape(B*T, -1),
         'hand_pose': hand_pose.reshape(B*T*NUM_JOINTS, 3),
@@ -62,7 +71,12 @@ def run_mano(trans, root_orient, hand_pose, is_right=None, betas=None, use_cuda=
     rotmat_mano_params['transl'] = trans.reshape(B*T, 3)
 
     if use_cuda:
-        mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        if torch.backends.mps.is_available():
+            mano_output = mano(**{k: v.float().to('mps') for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        elif torch.cuda.is_available():
+            mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        else:
+            mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
     else:
         mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
 
@@ -126,7 +140,11 @@ def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_
     mano_cfg = {k.lower(): v for k,v in MANO_cfg.items()}
     mano = MANO(**mano_cfg)
     if use_cuda:
-        mano = mano.cuda()
+        if torch.backends.mps.is_available():
+            mano = mano.to('mps')
+        elif torch.cuda.is_available():
+            mano = mano.cuda()
+        # If neither is available, keep on CPU
     
     # fix MANO shapedirs of the left hand bug (https://github.com/vchoutas/smplx/issues/48)
     if fix_shapedirs:
@@ -134,6 +152,11 @@ def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_
 
     B, T, _ = root_orient.shape
     NUM_JOINTS = 15
+
+    # Handle None betas by creating default zero betas
+    if betas is None:
+        betas = torch.zeros(B, 10, device=root_orient.device)
+
     mano_params = {
         'global_orient': root_orient.reshape(B*T, -1),
         'hand_pose': hand_pose.reshape(B*T*NUM_JOINTS, 3),
@@ -145,7 +168,12 @@ def run_mano_left(trans, root_orient, hand_pose, is_right=None, betas=None, use_
     rotmat_mano_params['transl'] = trans.reshape(B*T, 3)
 
     if use_cuda:
-        mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        if torch.backends.mps.is_available():
+            mano_output = mano(**{k: v.float().to('mps') for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        elif torch.cuda.is_available():
+            mano_output = mano(**{k: v.float().cuda() for k,v in rotmat_mano_params.items()}, pose2rot=False)
+        else:
+            mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
     else:
         mano_output = mano(**{k: v.float() for k,v in rotmat_mano_params.items()}, pose2rot=False)
 

@@ -48,7 +48,7 @@ class HAWOR(pl.LightningModule):
         self.backbone = create_backbone(cfg)
         try:
             if cfg.MODEL.BACKBONE.get('PRETRAINED_WEIGHTS', None):
-                whole_state_dict = torch.load(cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS, map_location='cpu')['state_dict']
+                whole_state_dict = torch.load(cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS, map_location='cpu', weights_only=False)['state_dict']
                 backbone_state_dict = {}
                 for key in whole_state_dict:
                     if key[:9] == 'backbone.':
@@ -116,7 +116,7 @@ class HAWOR(pl.LightningModule):
         self.automatic_optimization = False
 
         if cfg.MODEL.get('LOAD_WEIGHTS', None):
-            whole_state_dict = torch.load(cfg.MODEL.LOAD_WEIGHTS, map_location='cpu')['state_dict']
+            whole_state_dict = torch.load(cfg.MODEL.LOAD_WEIGHTS, map_location='cpu', weights_only=False)['state_dict']
             self.load_state_dict(whole_state_dict, strict=True)
             print(f"load {cfg.MODEL.LOAD_WEIGHTS}")
 
@@ -376,8 +376,17 @@ class HAWOR(pl.LightningModule):
 
         return output
 
-    def inference(self, imgfiles, boxes, img_focal, img_center, device='cuda', do_flip=False):
-        db = TrackDatasetEval(imgfiles, boxes, img_focal=img_focal, 
+    def inference(self, imgfiles, boxes, img_focal, img_center, device=None, do_flip=False):
+        # Determine device if not specified
+        if device is None:
+            if torch.backends.mps.is_available():
+                device = torch.device('mps')
+            elif torch.cuda.is_available():
+                device = torch.device('cuda')
+            else:
+                device = torch.device('cpu')
+
+        db = TrackDatasetEval(imgfiles, boxes, img_focal=img_focal,
                         img_center=img_center, normalization=True, dilate=1.2, do_flip=do_flip)
 
         # Results
