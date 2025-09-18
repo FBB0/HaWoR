@@ -72,3 +72,27 @@ ipython_config.py
 
 vis.mp4
 imgui.ini
+
+# Our additions for custom implementation
+*_output/
+*_test/
+example_outputs/
+batch_output/
+hawor_output_*/
+simplified_output_*/
+advanced_output_*/
+test_output/
+advanced_test/
+
+# Virtual environments (if created in project)
+hawor/
+venv/
+env/
+
+# Processing results
+*.npz
+batch_summary.json
+
+# Temporary files
+*.tmp
+*.temp
