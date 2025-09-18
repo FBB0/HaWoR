@@ -1,8 +1,12 @@
 # Project specific data and submodule
-
+/example/*
+output/*
 /example/video_0
 /weights
 /app_pytorch3d*
+
+# Keep evaluation framework
+!evaluation_framework/
 
 .vscode/
 **/.DS_Store
@@ -34,6 +38,7 @@ logs*
 *.pkl
 /dataset*/
 /eval*/
+!evaluation_framework/
 /thirdparty/aitviewer
 
 # Byte-compiled / optimized / DLL files
