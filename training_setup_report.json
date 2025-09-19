@@ -1,0 +1,155 @@
+{
+  "setup_summary": {
+    "timestamp": "2025-09-18T21:16:05.006836",
+    "base_directory": ".",
+    "environment_validation": {
+      "base_directory": true,
+      "weights_directory": true,
+      "data_directory": true,
+      "configs_directory": true,
+      "enhanced_training_script": true,
+      "evaluation_framework": true,
+      "arctic_data": true,
+      "mano_models": true,
+      "model_weights": true
+    },
+    "data_paths": {
+      "arctic_data_root": "thirdparty/arctic/unpack/arctic_data/data",
+      "mano_data_dir": "_DATA/data",
+      "mano_model_path": "_DATA/data/mano",
+      "mano_left_path": "_DATA/data_left/mano_left",
+      "pretrained_weights": "weights/hawor/checkpoints/hawor.ckpt",
+      "infiller_weights": "weights/hawor/checkpoints/infiller.pt",
+      "model_config": "weights/hawor/model_config.yaml",
+      "training_data_dir": "training_data",
+      "validation_data_dir": "validation_data",
+      "output_dir": "training_output",
+      "log_dir": "training_logs",
+      "checkpoint_dir": "checkpoints",
+      "report_dir": "reports",
+      "tensorboard_log_dir": "logs/tensorboard"
+    },
+    "configuration": {
+      "data": {
+        "arctic_data_root": "thirdparty/arctic/unpack/arctic_data/data",
+        "training_data_dir": "training_data",
+        "validation_data_dir": "validation_data",
+        "mano_data_dir": "_DATA/data",
+        "mano_model_path": "_DATA/data/mano",
+        "image_size": 256,
+        "num_workers": 8,
+        "pin_memory": true,
+        "prefetch_factor": 2
+      },
+      "model": {
+        "backbone_type": "vit",
+        "pretrained_weights": "weights/hawor/checkpoints/hawor.ckpt",
+        "torch_compile": 1,
+        "mano_gender": "neutral",
+        "num_hand_joints": 15,
+        "st_module": true,
+        "motion_module": true,
+        "st_hdim": 512,
+        "motion_hdim": 384,
+        "st_nlayer": 6,
+        "motion_nlayer": 6
+      },
+      "training": {
+        "max_epochs": 100,
+        "batch_size": 8,
+        "learning_rate": 1e-05,
+        "weight_decay": 0.0001,
+        "grad_clip_val": 1.0,
+        "warmup_epochs": 5,
+        "early_stopping_patience": 15,
+        "accumulate_grad_batches": 1
+      },
+      "loss": {
+        "use_enhanced_loss": true,
+        "use_adaptive_weights": true,
+        "temporal_window": 5,
+        "weights": {
+          "KEYPOINTS_3D": 0.1,
+          "KEYPOINTS_2D": 0.05,
+          "GLOBAL_ORIENT": 0.01,
+          "HAND_POSE": 0.01,
+          "BETAS": 0.005,
+          "MESH_VERTICES": 0.02,
+          "MESH_FACES": 0.01,
+          "TEMPORAL_CONSISTENCY": 0.005,
+          "OCCLUSION_ROBUSTNESS": 0.01
+        }
+      },
+      "evaluation": {
+        "eval_every_n_epochs": 1,
+        "val_check_interval": 1.0,
+        "eval_metrics": [
+          "mpjpe_3d",
+          "mpjpe_2d",
+          "pck_3d_15mm",
+          "pck_2d_10px",
+          "temporal_consistency",
+          "mesh_quality"
+        ]
+      },
+      "logging": {
+        "use_tensorboard": true,
+        "use_wandb": false,
+        "tensorboard_log_dir": "logs/tensorboard",
+        "log_every_n_steps": 50,
+        "log_images_every_n_steps": 500,
+        "render_frequency": 1000
+      },
+      "hardware": {
+        "devices": 1,
+        "accelerator": "auto",
+        "precision": 16,
+        "find_unused_parameters": false
+      },
+      "output": {
+        "output_dir": "training_output",
+        "log_dir": "training_logs",
+        "checkpoint_dir": "checkpoints",
+        "report_dir": "reports",
+        "save_top_k": 3,
+        "save_every_n_epochs": 10,
+        "monitor": "val/loss",
+        "mode": "min"
+      },
+      "arctic": {
+        "subjects": [
+          "s01",
+          "s02",
+          "s04",
+          "s05",
+          "s06",
+          "s07",
+          "s08",
+          "s09",
+          "s10"
+        ],
+        "max_sequences_per_subject": 20,
+        "min_sequence_length": 10,
+        "max_sequence_length": 100,
+        "data_filtering": {
+          "min_confidence": 0.5,
+          "max_occlusion_level": 0.8,
+          "min_keypoint_visibility": 0.7
+        }
+      }
+    }
+  },
+  "next_steps": [
+    "1. Run data preparation: python prepare_training_data.py",
+    "2. Start training: python launch_training.py",
+    "3. Monitor progress: python monitor_training.py",
+    "4. View logs: tensorboard --logdir=logs/tensorboard"
+  ],
+  "recommendations": [
+    "Ensure sufficient disk space for training data",
+    "Monitor GPU memory usage during training",
+    "Run validation on small dataset first",
+    "Set up regular checkpoint backups"
+  ],
+  "status": "READY"
+}

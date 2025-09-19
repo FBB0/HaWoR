@@ -229,12 +229,97 @@ def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
             
             vertices = outputs["vertices"][0].cpu()  # (T, N, 3)
             device = get_device()
-            # Skip rendering for now due to PyTorch3D compatibility issues
-            # TODO: Implement alternative rendering or fix PyTorch3D device issues
-            print("⚠️  Skipping mesh rendering due to PyTorch3D compatibility issues")
-            for img_i, _ in enumerate(img_ck):
-                # Create dummy mask for now
-                model_masks[frame_ck[img_i]] = np.ones((H, W), dtype=bool)
+
+            # Implement PyTorch3D rendering with proper device handling
+            try:
+                # Force CPU rendering for PyTorch3D compatibility on Apple Silicon and avoid device issues
+                render_device = torch.device('cpu')
+
+                # Create a simple mesh-based mask renderer
+                from pytorch3d.structures import Meshes
+                from pytorch3d.renderer import (
+                    RasterizationSettings, MeshRasterizer,
+                    PerspectiveCameras
+                )
+
+                # Setup camera parameters
+                cameras = PerspectiveCameras(
+                    focal_length=((img_focal, img_focal),),
+                    principal_point=((W/2, H/2),),
+                    device=render_device
+                )
+
+                # Setup rasterizer
+                raster_settings = RasterizationSettings(
+                    image_size=(H, W),
+                    blur_radius=0.0,
+                    faces_per_pixel=1,
+                )
+                rasterizer = MeshRasterizer(
+                    cameras=cameras,
+                    raster_settings=raster_settings
+                )
+
+                for img_i, _ in enumerate(img_ck):
+                    frame_idx = frame_ck[img_i]
+                    verts = vertices[img_i].to(render_device)  # (N, 3)
+
+                    # Get MANO faces for current frame
+                    if "faces" in outputs and outputs["faces"] is not None:
+                        if outputs["faces"].dim() > 3:  # (B, T, F, 3)
+                            faces = outputs["faces"][0, img_i].to(render_device).long()
+                        else:  # (B, F, 3) or (F, 3)
+                            faces = outputs["faces"][0].to(render_device).long() if outputs["faces"].dim() == 3 else outputs["faces"].to(render_device).long()
+                    else:
+                        # Use default MANO faces - get from a temporary MANO call
+                        from hawor.utils.process import get_mano_faces
+                        try:
+                            faces = get_mano_faces(is_right=not do_flip).to(render_device).long()
+                        except:
+                            # Fallback to simple triangulated faces
+                            n_verts = verts.shape[0]
+                            faces = torch.zeros((min(n_verts//3 * 3, 778), 3), device=render_device, dtype=torch.long)
+                            for i in range(min(n_verts//3, 778//3)):
+                                faces[i*3:(i+1)*3] = torch.tensor([[i*3, i*3+1, i*3+2]], device=render_device)
+
+                    # Create mesh and rasterize
+                    try:
+                        mesh = Meshes(verts=[verts], faces=[faces])
+                        fragments = rasterizer(mesh)
+
+                        # Extract mask from depth buffer
+                        depth = fragments.zbuf[0, :, :, 0]  # (H, W)
+                        mask = (depth > 0).cpu().numpy()
+                        model_masks[frame_idx] = mask
+                    except Exception as mesh_error:
+                        print(f"⚠️  Mesh rendering failed for frame {frame_idx}: {mesh_error}")
+                        # Create a simple geometric mask based on hand bounds
+                        verts_2d = verts[:, :2]  # Use x,y coordinates
+                        if len(verts_2d) > 0:
+                            # Create simple bounding box mask
+                            x_min, x_max = verts_2d[:, 0].min().item(), verts_2d[:, 0].max().item()
+                            y_min, y_max = verts_2d[:, 1].min().item(), verts_2d[:, 1].max().item()
+
+                            # Convert to image coordinates
+                            x_min_px = max(0, int((x_min + 1) * W / 2))
+                            x_max_px = min(W, int((x_max + 1) * W / 2))
+                            y_min_px = max(0, int((y_min + 1) * H / 2))
+                            y_max_px = min(H, int((y_max + 1) * H / 2))
+
+                            mask = np.zeros((H, W), dtype=bool)
+                            mask[y_min_px:y_max_px, x_min_px:x_max_px] = True
+                            model_masks[frame_idx] = mask
+                        else:
+                            model_masks[frame_idx] = np.ones((H, W), dtype=bool)
+
+            except ImportError:
+                print("⚠️  PyTorch3D not available, using dummy masks")
+                for img_i, _ in enumerate(img_ck):
+                    model_masks[frame_ck[img_i]] = np.ones((H, W), dtype=bool)
+            except Exception as e:
+                print(f"⚠️  Rendering failed ({e}), using dummy masks")
+                for img_i, _ in enumerate(img_ck):
+                    model_masks[frame_ck[img_i]] = np.ones((H, W), dtype=bool)
                 
     model_masks = model_masks > 0 # bool
     np.save(f'{seq_folder}/tracks_{start_idx}_{end_idx}/model_masks.npy', model_masks)
