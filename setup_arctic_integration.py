@@ -28,7 +28,7 @@ class ArcticIntegrationManager:
     
     def check_arctic_setup(self) -> Dict[str, bool]:
         """Check if ARCTIC is properly set up"""
-        print("🔍 Checking ARCTIC setup...")
+        print("Checking ARCTIC setup...")
         
         checks = {
             'arctic_repo_exists': self.arctic_root.exists(),
@@ -151,7 +151,7 @@ This will download a small test dataset to verify everything works.
             subprocess.run([sys.executable, 'scripts_data/unzip_download.py'], check=True)
             
             # Verify checksums
-            print("🔍 Verifying checksums...")
+            print("Verifying checksums...")
             subprocess.run([sys.executable, 'scripts_data/checksum.py'], check=True)
             
             # Move unpacked data to expected location

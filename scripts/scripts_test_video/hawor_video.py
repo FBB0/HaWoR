@@ -54,12 +54,9 @@ def load_hawor(checkpoint_path):
 
 
 def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
-    print(f"🔍 [DEBUG] hawor_motion_estimation called with checkpoint: {args.checkpoint}")
     try:
         model, model_cfg = load_hawor(args.checkpoint)
-        print(f"🔍 [DEBUG] Model loaded successfully")
     except Exception as e:
-        print(f"🔍 [DEBUG] Error loading model: {e}")
         raise
 
     # Prioritize MPS for macOS, fallback to CUDA then CPU
@@ -69,9 +66,7 @@ def hawor_motion_estimation(args, start_idx, end_idx, seq_folder):
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
-    print(f"🔍 [DEBUG] Using device: {device}")
     model = model.to(device)
-    print(f"🔍 [DEBUG] Model moved to device successfully")
     model.eval()
 
     file = args.video_path
@@ -285,7 +280,6 @@ def hawor_infiller(args, start_idx, end_idx, frame_chunks_all):
 
     # Try to load SLAM camera poses, create default ones if not available
     try:
-        print(f"🔍 [DEBUG] Loading SLAM camera poses from: {fpath}")
         R_w2c_sla_all, t_w2c_sla_all, R_c2w_sla_all, t_c2w_sla_all = load_slam_cam(fpath)
         # Convert numpy arrays to tensors
         R_w2c_sla_all = torch.tensor(R_w2c_sla_all, dtype=torch.float32)
@@ -305,7 +299,6 @@ def hawor_infiller(args, start_idx, end_idx, frame_chunks_all):
         R_c2w_sla_all = torch.tensor(np.tile(np.eye(3), (num_frames, 1, 1)), dtype=torch.float32)  # (N, 3, 3)
         t_c2w_sla_all = torch.tensor(np.zeros((num_frames, 3)), dtype=torch.float32)  # (N, 3)
 
-        print(f"🔍 [DEBUG] Created default camera poses for {num_frames} frames")
 
     pred_trans = torch.zeros(2, len(imgfiles), 3)
     pred_rot = torch.zeros(2, len(imgfiles), 3)

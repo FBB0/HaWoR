@@ -119,9 +119,6 @@ class MultiHeadedAttention(nn.Module):
         atten_score = torch.matmul(q, k.transpose(-1, -2))
 
         # qpos = torch.matmul(q, pos_emb.transpose(-1, -2))
-        # DEBUG
-        # ones = torch.zeros(q.shape)
-        # ones[:, :, :, 0] = 1.0
         # qpos = torch.matmul(ones, pos_emb.transpose(-1, -2))
         # atten_score = atten_score + self.skew(qpos, mem_len)
         atten_score = atten_score * self.atten_scale
