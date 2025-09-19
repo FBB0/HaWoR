@@ -1,0 +1,308 @@
+{
+  "data": {
+    "arctic_data_root": "thirdparty/arctic/unpack/arctic_data/data",
+    "training_data_dir": "training_data",
+    "validation_data_dir": "validation_data",
+    "mano_data_dir": "_DATA/data",
+    "mano_model_path": "_DATA/data/mano",
+    "image_size": 256,
+    "num_workers": 8,
+    "pin_memory": true,
+    "prefetch_factor": 2
+  },
+  "model": {
+    "backbone_type": "vit",
+    "pretrained_weights": "weights/hawor/checkpoints/hawor.ckpt",
+    "torch_compile": 1,
+    "mano_gender": "neutral",
+    "num_hand_joints": 15,
+    "st_module": true,
+    "motion_module": true,
+    "st_hdim": 512,
+    "motion_hdim": 384,
+    "st_nlayer": 6,
+    "motion_nlayer": 6
+  },
+  "training": {
+    "max_epochs": 100,
+    "batch_size": 5,
+    "learning_rate": 1e-05,
+    "weight_decay": 0.0001,
+    "grad_clip_val": 1.0,
+    "warmup_epochs": 10,
+    "early_stopping_patience": 15,
+    "accumulate_grad_batches": 6,
+    "learning_rate_schedule": {
+      "base_lr": 0.0001,
+      "min_lr": 1e-07,
+      "schedule_type": "cosine_with_restarts",
+      "warmup_epochs": 10,
+      "cosine_restarts": {
+        "t_0": 20,
+        "t_mult": 2,
+        "eta_min_ratio": 0.01
+      },
+      "adaptive_lr": {
+        "patience": 5,
+        "factor": 0.5,
+        "min_delta": 0.0001
+      }
+    }
+  },
+  "loss": {
+    "use_enhanced_loss": true,
+    "use_adaptive_weights": true,
+    "temporal_window": 5,
+    "weights": {
+      "KEYPOINTS_3D": 0.1,
+      "KEYPOINTS_2D": 0.05,
+      "GLOBAL_ORIENT": 0.01,
+      "HAND_POSE": 0.01,
+      "BETAS": 0.005,
+      "MESH_VERTICES": 0.02,
+      "MESH_FACES": 0.01,
+      "TEMPORAL_CONSISTENCY": 0.005,
+      "OCCLUSION_ROBUSTNESS": 0.01
+    },
+    "adaptive_weights": true,
+    "weight_schedule": {
+      "schedule_type": "phase_based",
+      "phase_transitions": [
+        30,
+        70
+      ],
+      "transition_smoothing": 5,
+      "adaptive_scaling": {
+        "enabled": true,
+        "monitor_metric": "val/loss",
+        "scale_factor_range": [
+          0.5,
+          2.0
+        ],
+        "patience": 3
+      }
+    },
+    "optimized_weights": {
+      "phase_1_weights": {
+        "KEYPOINTS_3D": 0.2,
+        "KEYPOINTS_2D": 0.1,
+        "GLOBAL_ORIENT": 0.05,
+        "HAND_POSE": 0.05,
+        "BETAS": 0.02,
+        "MESH_VERTICES": 0.15,
+        "MESH_FACES": 0.01,
+        "TEMPORAL_CONSISTENCY": 0.001,
+        "OCCLUSION_ROBUSTNESS": 0.005
+      },
+      "phase_2_weights": {
+        "KEYPOINTS_3D": 0.15,
+        "KEYPOINTS_2D": 0.08,
+        "GLOBAL_ORIENT": 0.03,
+        "HAND_POSE": 0.03,
+        "BETAS": 0.01,
+        "MESH_VERTICES": 0.12,
+        "MESH_FACES": 0.02,
+        "TEMPORAL_CONSISTENCY": 0.005,
+        "OCCLUSION_ROBUSTNESS": 0.01
+      },
+      "phase_3_weights": {
+        "KEYPOINTS_3D": 0.1,
+        "KEYPOINTS_2D": 0.05,
+        "GLOBAL_ORIENT": 0.02,
+        "HAND_POSE": 0.02,
+        "BETAS": 0.005,
+        "MESH_VERTICES": 0.08,
+        "MESH_FACES": 0.015,
+        "TEMPORAL_CONSISTENCY": 0.01,
+        "OCCLUSION_ROBUSTNESS": 0.015
+      }
+    }
+  },
+  "evaluation": {
+    "eval_every_n_epochs": 1,
+    "val_check_interval": 1.0,
+    "eval_metrics": [
+      "mpjpe_3d",
+      "mpjpe_2d",
+      "pck_3d_15mm",
+      "pck_2d_10px",
+      "temporal_consistency",
+      "mesh_quality"
+    ]
+  },
+  "logging": {
+    "use_tensorboard": true,
+    "use_wandb": false,
+    "tensorboard_log_dir": "logs/tensorboard",
+    "log_every_n_steps": 50,
+    "log_images_every_n_steps": 500,
+    "render_frequency": 1000
+  },
+  "hardware": {
+    "devices": 1,
+    "accelerator": "auto",
+    "precision": 16,
+    "find_unused_parameters": false
+  },
+  "output": {
+    "output_dir": "training_output",
+    "log_dir": "training_logs",
+    "checkpoint_dir": "checkpoints",
+    "report_dir": "reports",
+    "save_top_k": 3,
+    "save_every_n_epochs": 10,
+    "monitor": "val/loss",
+    "mode": "min"
+  },
+  "arctic": {
+    "subjects": [
+      "s01",
+      "s02",
+      "s04",
+      "s05",
+      "s06",
+      "s07",
+      "s08",
+      "s09",
+      "s10"
+    ],
+    "max_sequences_per_subject": 20,
+    "min_sequence_length": 10,
+    "max_sequence_length": 100,
+    "data_filtering": {
+      "min_confidence": 0.5,
+      "max_occlusion_level": 0.8,
+      "min_keypoint_visibility": 0.7
+    }
+  },
+  "optimization": {
+    "regularization": {
+      "weight_decay": {
+        "value": 0.0001,
+        "exclude_bias": true,
+        "exclude_norm": true,
+        "per_layer_decay": {
+          "backbone": 0.0001,
+          "head": 5e-05,
+          "motion_module": 8e-05
+        }
+      },
+      "dropout": {
+        "attention_dropout": 0.1,
+        "path_dropout": 0.1,
+        "fc_dropout": 0.2,
+        "adaptive_dropout": {
+          "enabled": true,
+          "start_rate": 0.2,
+          "end_rate": 0.05,
+          "decay_epochs": 50
+        }
+      },
+      "batch_normalization": {
+        "momentum": 0.1,
+        "eps": 1e-05,
+        "sync_bn": true
+      },
+      "label_smoothing": {
+        "enabled": true,
+        "smoothing": 0.1,
+        "apply_to": [
+          "classification_tasks"
+        ]
+      },
+      "data_augmentation": {
+        "mixup": {
+          "enabled": true,
+          "alpha": 0.2,
+          "prob": 0.3
+        },
+        "cutmix": {
+          "enabled": true,
+          "alpha": 1.0,
+          "prob": 0.3
+        },
+        "augmentation_strength": {
+          "rotation_range": 15,
+          "translation_range": 0.05,
+          "scale_range": 0.1,
+          "color_jitter": 0.1
+        }
+      }
+    },
+    "optimizer": {
+      "primary_optimizer": {
+        "type": "AdamW",
+        "params": {
+          "lr": 0.0001,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "weight_decay": 0.0001,
+          "amsgrad": false
+        },
+        "per_layer_config": {
+          "backbone": {
+            "lr_scale": 0.1,
+            "weight_decay": 0.0001
+          },
+          "head": {
+            "lr_scale": 1.0,
+            "weight_decay": 5e-05
+          }
+        }
+      },
+      "secondary_optimizer": {
+        "type": "SGD",
+        "params": {
+          "lr": 1e-05,
+          "momentum": 0.9,
+          "weight_decay": 0.0001,
+          "nesterov": true
+        }
+      },
+      "optimizer_schedule": {
+        "switch_epoch": 80,
+        "transition_epochs": 5,
+        "final_lr_ratio": 0.01
+      }
+    },
+    "advanced_techniques": {
+      "gradient_clipping": {
+        "max_norm": 1.0,
+        "norm_type": 2,
+        "adaptive_clipping": {
+          "enabled": true,
+          "percentile": 95,
+          "window_size": 100
+        }
+      },
+      "lookahead": {
+        "enabled": true,
+        "k": 5,
+        "alpha": 0.5
+      },
+      "sam_optimization": {
+        "enabled": false,
+        "rho": 0.05,
+        "adaptive": true
+      }
+    }
+  },
+  "optimization_metadata": {
+    "optimizer_version": "1.0",
+    "optimization_date": "2024-09-18",
+    "target_improvements": [
+      "25-40% faster convergence",
+      "10-15% better final accuracy",
+      "Improved training stability",
+      "Better generalization"
+    ],
+    "expected_training_time": {
+      "epochs": 100,
+      "estimated_hours": 8,
+      "gpu_hours": 8
+    }
+  }
+}

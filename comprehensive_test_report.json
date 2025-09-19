@@ -1,0 +1,134 @@
+{
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 5,
+    "success_rate": 0.625,
+    "total_duration": 0.19479894638061523,
+    "critical_tests_passed": 3,
+    "status": "NEEDS_ATTENTION"
+  },
+  "test_results": [
+    {
+      "name": "File Structure",
+      "passed": true,
+      "duration": 0.00011014938354492188,
+      "message": "Found 18/18 required files",
+      "details": {
+        "existing_files": [
+          "enhanced_training_evaluation.py",
+          "enhanced_training_pipeline.py",
+          "training_data_preparation.py",
+          "arctic_evaluation_framework.py",
+          "arctic_comparison_script.py",
+          "setup_training_pipeline.py",
+          "optimize_training_config.py",
+          "configs/production_training_config.json",
+          "configs/optimized_training_config.json",
+          "validate_framework.py",
+          "validate_metrics.py",
+          "demo_evaluation.py",
+          "test_arctic_evaluation.py",
+          "launch_training.py",
+          "prepare_training_data.py",
+          "monitor_training.py",
+          "ENHANCED_TRAINING_EVALUATION_README.md",
+          "ARCTIC_EVALUATION_FRAMEWORK_SUMMARY.md"
+        ],
+        "missing_files": [],
+        "total_required": 18
+      }
+    },
+    {
+      "name": "Configuration Files",
+      "passed": true,
+      "duration": 0.0002090930938720703,
+      "message": "Valid configurations: 2/2",
+      "details": {
+        "configs/production_training_config.json": {
+          "status": "valid",
+          "sections": 9
+        },
+        "configs/optimized_training_config.json": {
+          "status": "valid",
+          "sections": 11
+        }
+      }
+    },
+    {
+      "name": "Validation Frameworks",
+      "passed": true,
+      "duration": 0.09351301193237305,
+      "message": "Validation tests passed: 3/3",
+      "details": {
+        "Framework Validation": true,
+        "Metrics Validation": true,
+        "Demo Evaluation": true
+      }
+    },
+    {
+      "name": "Data Pipeline",
+      "passed": true,
+      "duration": 0.00018215179443359375,
+      "message": "Pipeline tests passed: 4/4",
+      "details": {
+        "ARCTIC Data": true,
+        "MANO Models": true,
+        "Output Directories": true,
+        "Config Loading": true
+      }
+    },
+    {
+      "name": "Training Components",
+      "passed": false,
+      "duration": 0.07639288902282715,
+      "message": "Training tests passed: 3/4",
+      "details": {
+        "Training Scripts": true,
+        "Config Optimization": true,
+        "Pipeline Setup": true,
+        "Training Launcher": false
+      }
+    },
+    {
+      "name": "Evaluation Pipeline",
+      "passed": false,
+      "duration": 0.0001628398895263672,
+      "message": "Evaluation tests passed: 3/4",
+      "details": {
+        "Evaluation Scripts": true,
+        "Evaluation Reports": true,
+        "Metrics Computation": false,
+        "Baseline Comparison": true
+      }
+    },
+    {
+      "name": "Component Integration",
+      "passed": false,
+      "duration": 0.00021886825561523438,
+      "message": "Integration tests passed: 3/4",
+      "details": {
+        "Config Compatibility": true,
+        "Data Path Consistency": true,
+        "Script Chain": false,
+        "Documentation": true
+      }
+    },
+    {
+      "name": "Performance Benchmarks",
+      "passed": true,
+      "duration": 0.02390289306640625,
+      "message": "Performance tests passed: 4/4",
+      "details": {
+        "Evaluation Speed": true,
+        "Memory Usage": true,
+        "Config Loading Speed": true,
+        "File I/O Speed": true
+      }
+    }
+  ],
+  "recommendations": [
+    "Fix training pipeline setup",
+    "Debug evaluation components",
+    "Fix component compatibility issues"
+  ]
+}
