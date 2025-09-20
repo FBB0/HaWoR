@@ -82,13 +82,16 @@ imgui.ini
 /thirdparty/
 /weights/
 /training_data/
-/output/
 
-# Training and experiment outputs
-/training_logs/
-/logs/
-/checkpoints/
-/experiments/
+# Organized output structure
+outputs/
+!outputs/README.md
+
+# Training and experiment outputs (legacy - now in outputs/)
+# /training_logs/
+# /logs/
+# /checkpoints/
+# /experiments/
 /arctic_comparison_results/
 /baseline_evaluation/
 /eddy_xu_output/

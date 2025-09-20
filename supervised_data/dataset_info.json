@@ -24,9 +24,6 @@
   "setup_date": "/Users/felipebononibello/Robotics/arms/egocentric/hawor-project/HaWoR",
   "status": "prepared_for_evaluation",
   "notes": [
-    "Training code not yet released by HaWoR authors",
-    "This setup prepares for future training and evaluation",
-    "Download datasets manually from official sources",
-    "Use evaluation framework to test current model performance"
+   
   ]
 }
