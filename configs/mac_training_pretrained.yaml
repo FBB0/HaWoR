@@ -30,14 +30,14 @@ data:
 
 # Training Configuration (Fine-tuning pretrained model)
 training:
-  max_epochs: 20  # More epochs for fine-tuning
-  learning_rate: 1e-5  # Low LR for fine-tuning
+  max_epochs: 30  # More epochs for fine-tuning
+  learning_rate: 5e-5  # Higher LR for better fine-tuning
   weight_decay: 1e-4  # Standard weight decay
-  grad_clip_val: 1.0  # Standard gradient clipping
-  accumulate_grad_batches: 2  # Effective batch size of 4
-  lr_scheduler: "cosine"  # Cosine annealing
-  warmup_epochs: 3  # Learning rate warmup
-  patience: 7  # Early stopping patience
+  grad_clip_val: 0.5  # Less aggressive clipping
+  accumulate_grad_batches: 1  # Simpler gradient accumulation
+  lr_scheduler: "step"  # Step decay for stability
+  warmup_epochs: 2  # Shorter warmup
+  patience: 10  # More patience for convergence
 
 # Loss Configuration (balanced for fine-tuning)
 loss:
@@ -51,7 +51,7 @@ loss:
 logging:
   log_every_n_steps: 5
   save_top_k: 3  # Keep multiple checkpoints
-  monitor: "val_keypoint_loss"
+  monitor: "val_loss"
   mode: "min"
   val_check_interval: 0.5  # Validate twice per epoch
 
@@ -59,10 +59,10 @@ logging:
 hardware:
   device: "mps"  # Use Apple Silicon GPU
   accelerator: "mps"
-  precision: 16  # Mixed precision for speed
+  precision: 32  # Full precision for stability
 
 # Paths Configuration
 paths:
-  save_dir: "outputs/mac_training_pretrained"
-  checkpoint_dir: "outputs/mac_training_pretrained/checkpoints"
-  log_dir: "outputs/mac_training_pretrained/logs"
+  save_dir: "outputs/mac_training_pretrained_v2"
+  checkpoint_dir: "outputs/mac_training_pretrained_v2/checkpoints"
+  log_dir: "outputs/mac_training_pretrained_v2/logs"

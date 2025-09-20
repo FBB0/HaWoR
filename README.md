@@ -113,6 +113,8 @@ python setup_hawor.py --full-setup
 # 🆕 Recommended: Pretrained Model Fine-tuning (Best performance)
 python src/training/arctic_training_pipeline.py --config configs/mac_training_pretrained.yaml
 # → Uses official HaWoR pretrained models, fine-tuning on ARCTIC data
+# → Optimized hyperparameters for stable training
+# → Full precision for numerical stability
 
 # Alternative: Ultra-Stable Training (From scratch)
 python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
