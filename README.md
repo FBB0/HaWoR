@@ -110,18 +110,24 @@ python setup_hawor.py --download-arctic-mini
 # Full ARCTIC setup
 python setup_hawor.py --full-setup
 
-# 🆕 Ultra-Stable Mac Training (Recommended for stability)
-python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
+# 🆕 Recommended: Pretrained Model Fine-tuning (Best performance)
+python src/training/arctic_training_pipeline.py --config configs/mac_training_pretrained.yaml
+# → Uses official HaWoR pretrained models, fine-tuning on ARCTIC data
 
-# Alternative Mac Training (Balanced speed/stability)
+# Alternative: Ultra-Stable Training (From scratch)
+python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
+# → No pretrained models, maximum stability
+
+# Alternative: Balanced Training (From scratch)
 python src/training/arctic_training_pipeline.py --config configs/mac_training_test.yaml
+# → Balanced speed/stability, no pretrained models
 
 # Full GPU Training (For production)
 python src/training/arctic_training_pipeline.py --config arctic_training_config.yaml
 
 # 📊 Training with Visualization
-python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
-# → Generates plots in outputs/mac_training_ultra_stable/visualizations/
+python src/training/arctic_training_pipeline.py --config configs/mac_training_pretrained.yaml
+# → Generates plots in outputs/mac_training_pretrained/visualizations/
 ```
 
 ### 5. Training Stability Guide
@@ -133,9 +139,22 @@ python src/training/arctic_training_pipeline.py --config configs/mac_training_st
 4. **Use conservative settings**: Lower LR, higher patience, smaller models
 
 **Configuration Options:**
-- `mac_training_stable.yaml` - Ultra-stable (CPU, minimal settings)
-- `mac_training_test.yaml` - Balanced (MPS GPU, moderate settings)
+- `mac_training_stable.yaml` - Ultra-stable (CPU, no pretrained models)
+- `mac_training_test.yaml` - Balanced (MPS GPU, no pretrained models)
+- `mac_training_pretrained.yaml` - **RECOMMENDED** (Pretrained models, fine-tuning)
 - `arctic_training_config.yaml` - Full training (GPU recommended)
+
+**🤖 Pretrained Models Available:**
+- `mac_training_pretrained.yaml` - Uses official HaWoR pretrained models
+- `mac_training_stable.yaml` - No pretrained models (from scratch)
+- `mac_training_test.yaml` - No pretrained models (from scratch)
+- Pretrained models downloaded from HuggingFace automatically
+- Fine-tuning approach for better performance
+
+**Configuration Control:**
+- `use_pretrained: true/false` - Enable/disable pretrained model loading
+- `load_weights: true/false` - Control weight loading
+- `pretrained_weights: "path"` - Specify pretrained model path
 
 ### 6. Visualization Features
 

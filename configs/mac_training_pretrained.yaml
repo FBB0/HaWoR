@@ -1,0 +1,68 @@
+# HaWoR Training Configuration with Pretrained Models
+# Uses official HaWoR pretrained weights from HuggingFace
+# Optimized for Mac with pretrained model fine-tuning
+
+# Model Configuration
+model:
+  name: "HaWoR"
+  backbone_type: "vit_base"  # Use larger model since we have pretrained weights
+  image_size: 256
+  pretrained_weights: "./weights/hawor/checkpoints/hawor.ckpt"  # Official pretrained
+  torch_compile: false  # Disable for Mac compatibility
+  dropout: 0.1  # Lower dropout since using pretrained
+  activation: "gelu"  # GELU activation
+  use_pretrained: true   # Enable pretrained model loading
+  checkpoint_path: "./weights/hawor/checkpoints/hawor.ckpt"
+  load_weights: true     # Load pretrained weights
+
+# Data Configuration
+data:
+  dataset: "ARCTIC"
+  data_root: "thirdparty/arctic"
+  train_subjects: ["s01"]
+  val_subjects: ["s02"]
+  batch_size: 2  # Can use larger batch with pretrained model
+  num_workers: 2  # Better data loading
+  pin_memory: false  # Keep disabled for Mac
+  image_size: 256
+  sequence_length: 32  # Full sequences
+  augmentation: true  # Enable augmentation for robustness
+
+# Training Configuration (Fine-tuning pretrained model)
+training:
+  max_epochs: 20  # More epochs for fine-tuning
+  learning_rate: 1e-5  # Low LR for fine-tuning
+  weight_decay: 1e-4  # Standard weight decay
+  grad_clip_val: 1.0  # Standard gradient clipping
+  accumulate_grad_batches: 2  # Effective batch size of 4
+  lr_scheduler: "cosine"  # Cosine annealing
+  warmup_epochs: 3  # Learning rate warmup
+  patience: 7  # Early stopping patience
+
+# Loss Configuration (balanced for fine-tuning)
+loss:
+  keypoint_loss_weight: 1.0
+  pose_loss_weight: 0.3    # Balanced for pretrained model
+  shape_loss_weight: 0.1   # Standard shape loss
+  global_orient_loss_weight: 0.2  # Standard orientation loss
+  regularization_weight: 0.01  # L2 regularization
+
+# Logging Configuration
+logging:
+  log_every_n_steps: 5
+  save_top_k: 3  # Keep multiple checkpoints
+  monitor: "val_keypoint_loss"
+  mode: "min"
+  val_check_interval: 0.5  # Validate twice per epoch
+
+# Hardware Configuration
+hardware:
+  device: "mps"  # Use Apple Silicon GPU
+  accelerator: "mps"
+  precision: 16  # Mixed precision for speed
+
+# Paths Configuration
+paths:
+  save_dir: "outputs/mac_training_pretrained"
+  checkpoint_dir: "outputs/mac_training_pretrained/checkpoints"
+  log_dir: "outputs/mac_training_pretrained/logs"
