@@ -259,7 +259,7 @@ def main():
     print("=" * 50)
 
     # Initialize trainer
-    trainer = ArcticTrainingPipeline(args.config)
+    trainer = EnhancedHaWoRTrainer(args.config)
 
     # Setup environment
     if not trainer.setup_training_environment():
