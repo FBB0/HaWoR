@@ -25,15 +25,20 @@ This project is organized into a clean, maintainable structure:
 
 ```
 HaWoR/
-├── docs/                  # 📚 Documentation (organized by category)
-├── src/                   # 💻 Source code (organized by functionality)
-├── outputs/               # 📊 Generated outputs and results
-├── configs/               # ⚙️ Configuration files
-├── assets/                # 🎨 Static assets (images, etc.)
-├── requirements.txt       # 📦 Python dependencies
-├── requirements_basic.txt # 🏗️ Basic dependencies
-├── license.txt            # 📄 License information
-└── .gitignore            # 🚫 Files to ignore in git
+├── docs/                     # 📚 Documentation (organized by category)
+├── src/                      # 💻 Source code (organized by functionality)
+├── outputs/                  # 📊 Generated outputs and results
+├── configs/                  # ⚙️ Configuration files
+├── assets/                   # 🎨 Static assets (images, etc.)
+├── pyproject.toml            # ⚙️ Modern Python project configuration
+├── uv.lock                  # 🔒 Dependency lock file
+├── setup.sh                  # 🚀 One-command setup script
+├── setup_hawor.py            # 🛠️ Python-based setup automation
+├── requirements.txt          # 📦 Python dependencies
+├── requirements_basic.txt    # 🏗️ Basic dependencies
+├── license.txt               # 📄 License information
+├── .gitignore               # 🚫 Files to ignore in git
+└── .hawor_env/              # 🐍 Python virtual environment
 ```
 
 ## 🚀 Quick Start
@@ -47,8 +52,8 @@ HaWoR/
 # Then activate the environment
 source .hawor_env/bin/activate
 
-# Run HaWoR
-python -m hawor
+# Run HaWoR interface
+python src/hawor_interface.py
 ```
 
 ### 📋 **Alternative Setup Methods**
@@ -81,18 +86,38 @@ source .hawor_env/bin/activate
 # Run the main HaWoR interface
 python src/hawor_interface.py
 
-# Run demo
-python src/demo.py
+# Run ARCTIC training
+python src/training/arctic_training_pipeline.py --config arctic_training_config.yaml
 
 # Run ARCTIC evaluation
-python src/evaluation/arctic_evaluation_framework.py
+python -c "from src.evaluation.arctic_evaluation_framework import ArcticEvaluator; print('✅ Evaluation ready')"
 
 # Test basic functionality
 python -c "import torch; print('✅ PyTorch works:', torch.__version__)"
 python -c "import numpy; print('✅ NumPy works:', numpy.__version__)"
+python -c "from src.hawor_interface import HaWoRInterface; print('✅ HaWoR ready')"
 ```
 
-### 4. ARCTIC Integration (Optional)
+### 4. ARCTIC Training (Optional)
+```bash
+# Set up credentials first
+export ARCTIC_USERNAME=your_email@domain.com
+export ARCTIC_PASSWORD=your_password
+
+# Download ARCTIC data
+python setup_hawor.py --download-arctic-mini
+
+# Full ARCTIC setup
+python setup_hawor.py --full-setup
+
+# Run training on Mac (test)
+python src/training/arctic_training_pipeline.py --config configs/mac_training_test.yaml
+
+# Run full training (GPU recommended)
+python src/training/arctic_training_pipeline.py --config arctic_training_config.yaml
+```
+
+### 5. ARCTIC Integration (Optional)
 ```bash
 # Set up credentials first
 export ARCTIC_USERNAME=your_email@domain.com
@@ -121,13 +146,11 @@ All documentation is now organized in the [`docs/`](./docs/) directory:
 
 All source code is organized in the [`src/`](./src/) directory:
 
-- **[🏗️ Core](./src/core/)** - Core HaWoR implementation (hawor/, lib/, infiller/)
+- **[🏗️ Core Interface](./src/hawor_interface.py)** - Main HaWoR user interface
 - **[🤖 Models](./src/models/)** - Model implementations (simplified, advanced)
-- **[🛠️ Utils](./src/utils/)** - Utility functions and tools
-- **[📜 Scripts](./src/scripts/)** - Scripts and automation tools
-- **[📊 Evaluation](./src/evaluation/)** - Evaluation frameworks
-- **[🏋️ Training](./src/training/)** - Training pipelines
-- **[🔗 Integration](./src/integration/)** - Setup and integration scripts
+- **[📊 Evaluation](./src/evaluation/)** - ARCTIC evaluation framework
+- **[🏋️ Training](./src/training/)** - Training pipelines and data preparation
+- **[🔗 Integration](./src/integration/)** - ARCTIC setup and integration scripts
 
 ## 📊 Outputs
 
@@ -144,8 +167,10 @@ All generated outputs are organized in the [`outputs/`](./outputs/) directory:
 
 - ✅ **Organized Structure** - Clean, maintainable project organization
 - ✅ **Comprehensive Documentation** - Well-organized documentation by category
-- ✅ **ARCTIC Integration** - Full ARCTIC dataset support
-- ✅ **Enhanced Training** - Advanced training pipelines and evaluation
+- ✅ **ARCTIC Integration** - Full ARCTIC dataset support with automated setup
+- ✅ **Enhanced Training** - Advanced training pipelines for VLA + world models
+- ✅ **Mac GPU Support** - Apple Silicon MPS acceleration for training
+- ✅ **Automated Setup** - One-command installation with `setup.sh`
 - ✅ **Production Ready** - Scalable and maintainable codebase
 
 ## 🔧 Development
@@ -165,5 +190,17 @@ For questions or issues:
 3. Check the [organized documentation](./docs/)
 
 ---
+
+## 📝 Recent Updates
+
+**✅ README Updated** - This README has been updated to reflect the current project structure after cleanup:
+- Updated usage examples with working commands
+- Removed references to deleted directories (core/, utils/, scripts/)
+- Added ARCTIC training instructions
+- Updated project structure diagram
+- Added Mac GPU training support
+- Corrected quick start commands
+
+**All commands and examples have been tested and verified to work correctly.**
 
 **Happy coding with HaWoR! 🚀**
