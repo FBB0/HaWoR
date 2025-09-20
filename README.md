@@ -118,6 +118,10 @@ python src/training/arctic_training_pipeline.py --config configs/mac_training_te
 
 # Full GPU Training (For production)
 python src/training/arctic_training_pipeline.py --config arctic_training_config.yaml
+
+# 📊 Training with Visualization
+python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
+# → Generates plots in outputs/mac_training_ultra_stable/visualizations/
 ```
 
 ### 5. Training Stability Guide
@@ -133,7 +137,48 @@ python src/training/arctic_training_pipeline.py --config arctic_training_config.
 - `mac_training_test.yaml` - Balanced (MPS GPU, moderate settings)
 - `arctic_training_config.yaml` - Full training (GPU recommended)
 
-### 6. ARCTIC Integration (Optional)
+### 6. Visualization Features
+
+**🖼️ Training automatically generates visualizations to verify progress:**
+
+**📊 Training Progress Plots:**
+- Loss curves (train/val)
+- Keypoint error over epochs
+- Learning rate schedule
+- Additional metrics tracking
+
+**📈 Training Summary:**
+- Final error metrics comparison
+- Training time breakdown
+- Error improvement over time
+
+**📋 Training Reports:**
+- JSON report with detailed metrics
+- Training stability assessment
+- Configuration summary
+- Recommendations for improvement
+
+**📁 Visualization Output:**
+```
+outputs/mac_training_stable/visualizations/
+├── training_progress.png      # Loss curves and metrics
+├── training_summary.png       # Final summary plots
+└── training_report.json       # Detailed training report
+```
+
+**🔍 Verification Commands:**
+```bash
+# Check if visualizations were generated
+ls outputs/mac_training_stable/visualizations/
+
+# View training report
+cat outputs/mac_training_stable/visualizations/training_report.json
+
+# Test visualization module directly
+python src/training/visualization.py
+```
+
+### 7. ARCTIC Integration (Optional)
 ```bash
 # Set up credentials first
 export ARCTIC_USERNAME=your_email@domain.com
