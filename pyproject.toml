@@ -1,0 +1,146 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hawor"
+version = "0.1.0"
+description = "World-Space Hand Motion Reconstruction from Egocentric Videos"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "HaWoR Team"},
+]
+keywords = ["computer-vision", "hand-tracking", "egocentric", "deep-learning", "pytorch"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "numpy>=1.26.0",
+    "opencv-python",
+    "pyrender",
+    "scikit-image",
+    "smplx>=0.1.28",
+    "yacs",
+    "timm",
+    "einops",
+    "pandas",
+    "hydra-core",
+    "rich",
+    "webdataset",
+    "ultralytics",
+    "pulp",
+    "supervision",
+    "pycocotools",
+    "joblib",
+    "natsort",
+    "pytorch-minimize",
+    "plyfile",
+    "easydict",
+    "loguru",
+    "dill",
+    "lapx",
+    "moderngl-window==2.4.6",
+    # PyTorch ecosystem
+    "torch>=2.0.0",
+    "torchvision",
+    "torchaudio",
+    "pytorch-lightning",
+    # Development tools
+    "pytest",
+    "pytest-cov",
+    "black",
+    "isort",
+    "flake8",
+    "pre-commit",
+    "seaborn>=0.13.2",
+    "tensorboard>=2.20.0",
+]
+
+[project.optional-dependencies]
+arctic = [
+    "pytorch3d",
+    "chumpy",
+]
+dev = [
+    "jupyter",
+    "matplotlib",
+    "seaborn",
+    "wandb",
+    "tensorboard",
+]
+docs = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-rtd-theme",
+]
+
+# [project.scripts]
+# Entry points disabled for now - use direct script execution
+# hawor = "src.hawor_interface:main"
+# hawor-demo = "src.demo:main"
+# hawor-eval = "src.evaluation.arctic_evaluation_framework:main"
+
+[project.urls]
+Homepage = "https://hawor-project.github.io/"
+Repository = "https://github.com/ThunderVVV/HaWoR"
+Issues = "https://github.com/ThunderVVV/HaWoR/issues"
+Documentation = "https://hawor-project.github.io/"
+
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.hatch.envs.arctic]
+extra-dependencies = [
+    "pytorch3d",
+    "chumpy",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "gpu: marks tests that require GPU",
+]
