@@ -1,0 +1,99 @@
+# ARCTIC Training Configuration for HaWoR
+# Adapted for Mac testing with ARCTIC data
+
+data:
+  training_data_dir: thirdparty/arctic/data/cropped_images/s01/
+  validation_data_dir: thirdparty/arctic/data/cropped_images/s01/
+  image_size: 256
+  mano_data_dir: thirdparty/arctic/downloads/raw_seqs/s01/
+  mano_model_path: thirdparty/arctic/downloads/meta/
+  num_workers: 1  # Reduced for Mac
+
+model:
+  backbone_type: vit_small  # Use smaller model for Mac
+  pretrained_weights: null
+  torch_compile: false  # Disable for Mac compatibility
+  mano_gender: neutral
+  num_hand_joints: 15
+  st_module: false
+  st_hdim: 256  # Reduced for Mac
+  st_nlayer: 3   # Reduced for Mac
+  motion_module: false
+  motion_hdim: 256  # Reduced for Mac
+  motion_nlayer: 3   # Reduced for Mac
+
+training:
+  max_epochs: 2  # Short test run for Mac
+  batch_size: 1  # Very small for Mac
+  learning_rate: 5.0e-05  # Lower LR for small batches
+  weight_decay: 0.0001
+  min_lr: 1.0e-07
+  grad_clip_val: 1.0
+  warmup_epochs: 1
+  early_stopping_patience: 5
+  accumulate_grad_batches: 1
+
+loss:
+  use_enhanced_loss: true
+  use_adaptive_weights: true
+  temporal_window: 3  # Smaller window for Mac
+  weights:
+    KEYPOINTS_3D: 0.1
+    KEYPOINTS_2D: 0.05
+    GLOBAL_ORIENT: 0.01
+    HAND_POSE: 0.01
+    BETAS: 0.005
+    MESH_VERTICES: 0.02
+    MESH_FACES: 0.01
+    TEMPORAL_CONSISTENCY: 0.005
+    OCCLUSION_ROBUSTNESS: 0.01
+
+evaluation:
+  eval_every_n_epochs: 1
+  val_check_interval: 1.0
+  eval_metrics:
+    - mpjpe_3d
+    - mpjpe_2d
+    - pck_3d_15mm
+    - pck_2d_10px
+    - temporal_consistency
+    - mesh_quality
+
+logging:
+  use_tensorboard: true
+  use_wandb: false  # Disable for Mac testing
+  tensorboard_log_dir: outputs/mac_training/logs
+  log_every_n_steps: 10  # More frequent for Mac
+  log_images_every_n_steps: 50
+  render_frequency: 100
+
+hardware:
+  devices: 1
+  accelerator: auto  # Let PyTorch Lightning choose
+  precision: 32  # Use full precision for Mac stability
+  find_unused_parameters: false
+
+output:
+  output_dir: outputs/mac_training
+  log_dir: outputs/mac_training/logs
+  checkpoint_dir: outputs/mac_training/checkpoints
+  report_dir: outputs/mac_training/reports
+  save_top_k: 2
+  save_every_n_epochs: 1
+  monitor: val/loss
+  mode: min
+
+# ARCTIC specific parameters
+arctic:
+  data_root: thirdparty/arctic
+  train_subjects: ["s01"]
+  val_subjects: ["s02"]  # Use same for testing
+  sequence_length: 16
+  max_sequences: 3  # Limit for Mac testing
+  use_multiple_cameras: true
+
+mano_mean_params: thirdparty/arctic/downloads/meta/misc.json
+create_body_pose: false
+render_log: true
+log_steps: 50
+experiment_name: hawor_arctic_mac_test

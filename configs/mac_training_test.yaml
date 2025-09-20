@@ -1,0 +1,56 @@
+# HaWoR Training Configuration for Mac Testing
+# Using ARCTIC s01 for training, s02 for validation
+
+# Model Configuration
+model:
+  name: "HaWoR"
+  backbone_type: "vit_small"  # Use smaller model for Mac testing
+  image_size: 256
+  pretrained_weights: null
+  torch_compile: false  # Disable for Mac compatibility
+
+# Data Configuration
+data:
+  dataset: "ARCTIC"
+  data_root: "thirdparty/arctic"
+  train_subjects: ["s01"]
+  val_subjects: ["s02"]
+  batch_size: 1  # Very small batch size for Mac testing
+  num_workers: 1
+  pin_memory: false  # Disable for Mac memory constraints
+  image_size: 256
+  sequence_length: 16  # Short sequences for Mac
+
+# Training Configuration
+training:
+  max_epochs: 5  # Short training for testing
+  learning_rate: 1e-5
+  weight_decay: 1e-4
+  grad_clip_val: 1.0
+  accumulate_grad_batches: 4  # Effective batch size of 8
+
+# Loss Configuration
+loss:
+  keypoint_loss_weight: 1.0
+  pose_loss_weight: 0.1
+  shape_loss_weight: 0.05
+  global_orient_loss_weight: 0.1
+
+# Logging Configuration
+logging:
+  log_every_n_steps: 10
+  save_top_k: 1
+  monitor: "val_loss"
+  mode: "min"
+
+# Hardware Configuration
+hardware:
+  device: "mps"  # Use Apple Silicon GPU
+  accelerator: "mps"
+  precision: 16  # Mixed precision for faster training
+
+# Paths Configuration
+paths:
+  save_dir: "outputs/training_test"
+  checkpoint_dir: "outputs/training_test/checkpoints"
+  log_dir: "outputs/training_test/logs"

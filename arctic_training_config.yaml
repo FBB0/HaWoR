@@ -1,0 +1,59 @@
+# ARCTIC Training Configuration for HaWoR
+# Simplified config for Mac testing with ARCTIC data
+
+# Training Configuration
+training:
+  max_epochs: 3  # Short test run for Mac
+  batch_size: 1  # Very small for Mac
+  learning_rate: 5.0e-05  # Lower LR for small batches
+  weight_decay: 0.0001
+  min_lr: 1.0e-07
+  grad_clip_val: 1.0
+  warmup_epochs: 1
+  early_stopping_patience: 5
+  accumulate_grad_batches: 1
+
+# ARCTIC specific parameters
+arctic:
+  data_root: thirdparty/arctic
+  train_subjects: ["s01"]
+  val_subjects: ["s01"]  # Use same for testing
+  sequence_length: 16
+  max_sequences: 3  # Limit for Mac testing
+  images_per_camera: 20  # Limit per camera
+  use_multiple_cameras: true
+
+# Model Configuration
+model:
+  backbone_type: vit_small  # Use smaller model for Mac
+  pretrained_weights: null
+  torch_compile: false  # Disable for Mac compatibility
+  mano_gender: neutral
+  num_hand_joints: 15
+
+# Hardware Configuration
+hardware:
+  devices: 1
+  accelerator: auto  # Let PyTorch Lightning choose
+  precision: 32  # Use full precision for Mac stability
+  find_unused_parameters: false
+
+# Output Configuration
+output_dir: outputs/arctic_training
+log_dir: outputs/arctic_training/logs
+checkpoint_dir: outputs/arctic_training/checkpoints
+report_dir: outputs/arctic_training/reports
+
+# Logging Configuration
+logging:
+  use_tensorboard: true
+  use_wandb: false  # Disable for Mac testing
+  tensorboard_log_dir: outputs/arctic_training/logs
+  log_every_n_steps: 10  # More frequent for Mac
+  log_images_every_n_steps: 50
+
+# Additional parameters
+experiment_name: hawor_arctic_mac_test
+create_body_pose: false
+render_log: true
+log_steps: 50
