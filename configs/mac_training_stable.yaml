@@ -1,0 +1,65 @@
+# HaWoR Training Configuration for Mac Stability
+# Ultra-conservative settings based on HaWoR paper and hand reconstruction best practices
+# Designed for maximum training stability on Mac
+
+# Model Configuration
+model:
+  name: "HaWoR"
+  backbone_type: "vit_tiny"  # Smallest model for stability
+  image_size: 224  # Smaller input size for Mac
+  pretrained_weights: null
+  torch_compile: false  # Disable for Mac compatibility
+  dropout: 0.2  # Higher dropout for regularization
+  activation: "gelu"  # GELU activation
+
+# Data Configuration
+data:
+  dataset: "ARCTIC"
+  data_root: "thirdparty/arctic"
+  train_subjects: ["s01"]
+  val_subjects: ["s02"]
+  batch_size: 1  # Minimal batch size for Mac stability
+  num_workers: 0  # Single-threaded for stability
+  pin_memory: false  # Keep disabled for Mac
+  image_size: 224
+  sequence_length: 16  # Shorter sequences for stability
+  augmentation: false  # Disable augmentation initially
+
+# Training Configuration (Ultra-stable)
+training:
+  max_epochs: 5  # Very short for testing
+  learning_rate: 5e-6  # Very low learning rate
+  weight_decay: 1e-6  # Minimal weight decay
+  grad_clip_val: 0.1  # Very low gradient clipping
+  accumulate_grad_batches: 1  # No accumulation
+  lr_scheduler: "plateau"  # Reduce on plateau for stability
+  warmup_epochs: 1  # Short warmup
+  patience: 10  # High patience for stability
+
+# Loss Configuration (Conservative weights)
+loss:
+  keypoint_loss_weight: 1.0
+  pose_loss_weight: 0.1    # Very conservative
+  shape_loss_weight: 0.01  # Very conservative
+  global_orient_loss_weight: 0.05  # Very conservative
+  regularization_weight: 0.001  # Minimal regularization
+
+# Logging Configuration
+logging:
+  log_every_n_steps: 2
+  save_top_k: 5  # Keep many checkpoints
+  monitor: "val_loss"
+  mode: "min"
+  val_check_interval: 1.0  # Validate every epoch
+
+# Hardware Configuration
+hardware:
+  device: "cpu"  # Start with CPU for maximum stability
+  accelerator: "cpu"
+  precision: 32  # Full precision for stability
+
+# Paths Configuration
+paths:
+  save_dir: "outputs/mac_training_ultra_stable"
+  checkpoint_dir: "outputs/mac_training_ultra_stable/checkpoints"
+  log_dir: "outputs/mac_training_ultra_stable/logs"

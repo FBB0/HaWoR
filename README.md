@@ -110,14 +110,30 @@ python setup_hawor.py --download-arctic-mini
 # Full ARCTIC setup
 python setup_hawor.py --full-setup
 
-# Run training on Mac (test)
+# 🆕 Ultra-Stable Mac Training (Recommended for stability)
+python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
+
+# Alternative Mac Training (Balanced speed/stability)
 python src/training/arctic_training_pipeline.py --config configs/mac_training_test.yaml
 
-# Run full training (GPU recommended)
+# Full GPU Training (For production)
 python src/training/arctic_training_pipeline.py --config arctic_training_config.yaml
 ```
 
-### 5. ARCTIC Integration (Optional)
+### 5. Training Stability Guide
+
+**For Mac Training Issues:**
+1. **Start with CPU**: Use `configs/mac_training_stable.yaml` for maximum stability
+2. **Monitor memory**: Keep batch size at 1, use CPU if MPS is unstable
+3. **Check gradients**: If training diverges, reduce learning rate
+4. **Use conservative settings**: Lower LR, higher patience, smaller models
+
+**Configuration Options:**
+- `mac_training_stable.yaml` - Ultra-stable (CPU, minimal settings)
+- `mac_training_test.yaml` - Balanced (MPS GPU, moderate settings)
+- `arctic_training_config.yaml` - Full training (GPU recommended)
+
+### 6. ARCTIC Integration (Optional)
 ```bash
 # Set up credentials first
 export ARCTIC_USERNAME=your_email@domain.com

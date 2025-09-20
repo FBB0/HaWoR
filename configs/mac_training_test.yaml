@@ -1,4 +1,5 @@
 # HaWoR Training Configuration for Mac Testing
+# Based on HaWoR paper recommendations and stability best practices
 # Using ARCTIC s01 for training, s02 for validation
 
 # Model Configuration
@@ -8,6 +9,8 @@ model:
   image_size: 256
   pretrained_weights: null
   torch_compile: false  # Disable for Mac compatibility
+  dropout: 0.1  # Add dropout for regularization
+  activation: "gelu"  # Use GELU activation for better training
 
 # Data Configuration
 data:
@@ -15,33 +18,39 @@ data:
   data_root: "thirdparty/arctic"
   train_subjects: ["s01"]
   val_subjects: ["s02"]
-  batch_size: 1  # Very small batch size for Mac testing
-  num_workers: 1
-  pin_memory: false  # Disable for Mac memory constraints
+  batch_size: 1  # Keep small for Mac memory constraints
+  num_workers: 2  # Increased workers for better data loading
+  pin_memory: false  # Keep disabled for Mac memory constraints
   image_size: 256
-  sequence_length: 16  # Short sequences for Mac
+  sequence_length: 32  # Standard sequence length from HaWoR paper
+  augmentation: true  # Enable data augmentation for robustness
 
 # Training Configuration
 training:
-  max_epochs: 5  # Short training for testing
-  learning_rate: 1e-5
-  weight_decay: 1e-4
-  grad_clip_val: 1.0
-  accumulate_grad_batches: 4  # Effective batch size of 8
+  max_epochs: 10  # Increased for better convergence
+  learning_rate: 1e-5  # Conservative learning rate
+  weight_decay: 1e-5  # Reduced weight decay
+  grad_clip_val: 0.5  # Lower gradient clipping
+  accumulate_grad_batches: 4  # Effective batch size of 4
+  lr_scheduler: "cosine"  # Cosine annealing for better convergence
+  warmup_epochs: 2  # Learning rate warmup
+  patience: 5  # Early stopping patience
 
-# Loss Configuration
+# Loss Configuration (balanced weights from HaWoR paper)
 loss:
   keypoint_loss_weight: 1.0
-  pose_loss_weight: 0.1
-  shape_loss_weight: 0.05
-  global_orient_loss_weight: 0.1
+  pose_loss_weight: 0.5    # Increased for pose stability
+  shape_loss_weight: 0.1   # Increased for shape consistency
+  global_orient_loss_weight: 0.2  # Increased for orientation stability
+  regularization_weight: 0.01  # L2 regularization
 
 # Logging Configuration
 logging:
-  log_every_n_steps: 10
-  save_top_k: 1
-  monitor: "val_loss"
+  log_every_n_steps: 5
+  save_top_k: 3  # Keep more checkpoints
+  monitor: "val_keypoint_loss"
   mode: "min"
+  val_check_interval: 0.5  # Validate twice per epoch
 
 # Hardware Configuration
 hardware:
@@ -51,6 +60,6 @@ hardware:
 
 # Paths Configuration
 paths:
-  save_dir: "outputs/training_test"
-  checkpoint_dir: "outputs/training_test/checkpoints"
-  log_dir: "outputs/training_test/logs"
+  save_dir: "outputs/mac_training_stable"
+  checkpoint_dir: "outputs/mac_training_stable/checkpoints"
+  log_dir: "outputs/mac_training_stable/logs"
