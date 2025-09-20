@@ -11,6 +11,9 @@ model:
   torch_compile: false  # Disable for Mac compatibility
   dropout: 0.2  # Higher dropout for regularization
   activation: "gelu"  # GELU activation
+  use_pretrained: false  # Explicitly disable pretrained models
+  checkpoint_path: null   # No checkpoint loading
+  load_weights: false     # Don't load any weights
 
 # Data Configuration
 data:
@@ -18,7 +21,7 @@ data:
   data_root: "thirdparty/arctic"
   train_subjects: ["s01"]
   val_subjects: ["s02"]
-  batch_size: 1  # Minimal batch size for Mac stability
+  batch_size: 4  # Minimal batch size for Mac stability
   num_workers: 0  # Single-threaded for stability
   pin_memory: false  # Keep disabled for Mac
   image_size: 224

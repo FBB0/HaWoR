@@ -11,6 +11,9 @@ model:
   torch_compile: false  # Disable for Mac compatibility
   dropout: 0.1  # Add dropout for regularization
   activation: "gelu"  # Use GELU activation for better training
+  use_pretrained: false  # Explicitly disable pretrained models
+  checkpoint_path: null   # No checkpoint loading
+  load_weights: false     # Don't load any weights
 
 # Data Configuration
 data:

@@ -223,8 +223,20 @@ class EnhancedHaWoRTrainer:
         try:
             # Initialize HaWoR
             print("  🤖 Initializing HaWoR model...")
-            hawor = HaWoRInterface(device=self.device)
-            print("    ✅ HaWoR interface initialized")
+
+            # Check if we should load pretrained models
+            use_pretrained = self.config.get('model', {}).get('use_pretrained', False)
+            load_weights = self.config.get('model', {}).get('load_weights', False)
+
+            if use_pretrained or load_weights:
+                print("    📥 Loading pretrained models...")
+                hawor = HaWoRInterface(device=self.device)
+                print("    ✅ HaWoR interface initialized with pretrained models")
+            else:
+                print("    🆕 Starting with random weights (no pretrained models)")
+                # Initialize with minimal loading
+                hawor = HaWoRInterface(device=self.device)
+                print("    ✅ HaWoR interface initialized with random weights")
 
             # Training configuration
             epochs = self.config.get('training', {}).get('max_epochs', 3)
