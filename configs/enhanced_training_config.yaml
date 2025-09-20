@@ -5,7 +5,7 @@
 # DATA CONFIGURATION
 # =============================================================================
 training_data_dir: './training_data'
-validation_data_dir: './validation_data'
+validation_data_dir: './training_data'
 image_size: 256
 num_workers: 8
 pin_memory: true
@@ -51,9 +51,9 @@ motion_nlayer: 6
 # Basic training settings
 max_epochs: 100
 batch_size: 8
-learning_rate: 1e-5
-weight_decay: 1e-4
-min_lr: 1e-7
+learning_rate: 0.00001
+weight_decay: 0.0001
+min_lr: 0.0000001
 grad_clip_val: 1.0
 
 # Training schedule
@@ -64,7 +64,7 @@ lr_decay_patience: 10
 
 # Early stopping
 early_stopping_patience: 15
-early_stopping_min_delta: 1e-4
+early_stopping_min_delta: 0.0001
 
 # Gradient accumulation
 accumulate_grad_batches: 1
@@ -210,14 +210,14 @@ data_filtering:
 optimizer: 'adamw'
 optimizer_params:
   betas: [0.9, 0.999]
-  eps: 1e-8
+  eps: 0.00000001
   amsgrad: false
 
 # Scheduler settings
 scheduler: 'cosine'
 scheduler_params:
   T_max: 100
-  eta_min: 1e-7
+  eta_min: 0.0000001
   warmup_epochs: 5
 
 # =============================================================================

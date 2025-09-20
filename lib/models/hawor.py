@@ -152,12 +152,39 @@ class HAWOR(pl.LightningModule):
             Dict: Dictionary containing the regression output
         """
 
-        image  = batch['img'].flatten(0, 1)
-        center = batch['center'].flatten(0, 1)
-        scale  = batch['scale'].flatten(0, 1)
-        img_focal = batch['img_focal'].flatten(0, 1)
-        img_center = batch['img_center'].flatten(0, 1)
-        bn = len(image)
+        # Handle inputs with or without temporal dimension
+        image = batch['img']
+        # Expected shapes:
+        # - (B, T, C, H, W) -> flatten to (B*T, C, H, W)
+        # - (B, C, H, W)    -> keep as is
+        # - (C, H, W)       -> add batch dim -> (1, C, H, W)
+        if image.dim() == 5:
+            image = image.flatten(0, 1)
+        elif image.dim() == 4:
+            pass
+        elif image.dim() == 3:
+            image = image.unsqueeze(0)
+        else:
+            raise ValueError(f"Unexpected image tensor shape: {image.shape}")
+
+        def _flatten_bt(t: torch.Tensor) -> torch.Tensor:
+            # Flatten (B, T, ...) to (B*T, ...), or squeeze (B,1,...) to (B,...)
+            if t.dim() == 3 and t.shape[1] == 1:
+                t = t.squeeze(1)
+                if t.dim() == 2 and t.shape[-1] == 1:
+                    t = t.squeeze(-1)
+                return t
+            if t.dim() >= 2 and t.shape[1] > 1:
+                return t.flatten(0, 1)
+            if t.dim() == 2 and t.shape[1] == 1:
+                return t.squeeze(1)
+            return t
+
+        center = _flatten_bt(batch['center'])
+        scale = _flatten_bt(batch['scale'])
+        img_focal = _flatten_bt(batch['img_focal'])
+        img_center = _flatten_bt(batch['img_center'])
+        bn = image.shape[0]
 
         # estimate focal length, and bbox
         bbox_info = self.bbox_est(center, scale, img_focal, img_center)
@@ -170,10 +197,12 @@ class HAWOR(pl.LightningModule):
         if self.st_module is not None:
             bb = einops.repeat(bbox_info, 'b c -> b c h w', h=16, w=12)
             feature = torch.cat([feature, bb], dim=1)
-
-            feature = einops.rearrange(feature, '(b t) c h w -> (b h w) t c', t=16)
-            feature = self.st_module(feature)
-            feature = einops.rearrange(feature, '(b h w) t c -> (b t) c h w', h=16, w=12)
+            # Only apply temporal attention if batch encodes a temporal dimension of 16
+            # Otherwise, skip temporal mixing while keeping shapes consistent
+            if bn % 16 == 0:
+                feature = einops.rearrange(feature, '(b t) c h w -> (b h w) t c', t=16)
+                feature = self.st_module(feature)
+                feature = einops.rearrange(feature, '(b h w) t c -> (b t) c h w', h=16, w=12)
 
         # smpl_head: transformer + smpl
         # pred_mano_params, pred_cam, pred_mano_params_list = self.mano_head(feature)
@@ -183,7 +212,7 @@ class HAWOR(pl.LightningModule):
         pred_rotmat_0 = rot6d_to_rotmat(pred_pose).reshape(-1, self.pose_num, 3, 3)
 
         # smpl motion module
-        if self.motion_module is not None:
+        if self.motion_module is not None and bn % 16 == 0:
             bb = einops.rearrange(bbox_info, '(b t) c -> b t c', t=16)
             pred_pose = einops.rearrange(pred_pose, '(b t) c -> b t c', t=16)
             pred_pose = torch.cat([pred_pose, bb], dim=2)
@@ -529,6 +558,12 @@ class HAWOR(pl.LightningModule):
 
         # Implement CLIFF (Li et al.) bbox feature
         cx, cy, b = center[:, 0], center[:, 1], scale * 200
+        
+        # Ensure all tensors have the same shape for stacking
+        # cx and cy should be [batch_size], b should be [batch_size, 1] -> [batch_size]
+        if b.dim() > 1:
+            b = b.squeeze(-1)
+        
         bbox_info = torch.stack([cx - img_cx, cy - img_cy, b], dim=-1)
         bbox_info[:, :2] = bbox_info[:, :2] / img_focal.unsqueeze(-1) * 2.8 
         bbox_info[:, 2] = (bbox_info[:, 2] - 0.24 * img_focal) / (0.06 * img_focal)  

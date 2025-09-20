@@ -103,18 +103,31 @@ class EnhancedHaWoRTrainer(pl.LightningModule):
         
         # Model configuration
         cfg.MODEL = CfgNode()
-        cfg.MODEL.IMAGE_SIZE = self.config.get('image_size', 256)
+        model_config = self.config.get('model', {})
+        data_config = self.config.get('data', {})
+
+        cfg.MODEL.IMAGE_SIZE = data_config.get('image_size', 256)
         cfg.MODEL.BACKBONE = CfgNode()
-        cfg.MODEL.BACKBONE.TYPE = self.config.get('backbone_type', 'vit')
-        cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS = self.config.get('pretrained_weights', None)
-        cfg.MODEL.BACKBONE.TORCH_COMPILE = self.config.get('torch_compile', 0)
+        cfg.MODEL.BACKBONE.TYPE = model_config.get('backbone_type', 'vit')
+        cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS = model_config.get('pretrained_weights', None)
+        cfg.MODEL.BACKBONE.TORCH_COMPILE = model_config.get('torch_compile', 0)
+
+        # ST Module configuration
+        cfg.MODEL.ST_MODULE = model_config.get('st_module', True)
+        cfg.MODEL.ST_HDIM = model_config.get('st_hdim', 512)
+        cfg.MODEL.ST_NLAYER = model_config.get('st_nlayer', 6)
+
+        # Motion Module configuration
+        cfg.MODEL.MOTION_MODULE = model_config.get('motion_module', True)
+        cfg.MODEL.MOTION_HDIM = model_config.get('motion_hdim', 384)
+        cfg.MODEL.MOTION_NLAYER = model_config.get('motion_nlayer', 6)
         
         # MANO configuration
         cfg.MANO = CfgNode()
-        cfg.MANO.DATA_DIR = self.config.get('mano_data_dir', '_DATA/data/')
-        cfg.MANO.MODEL_PATH = self.config.get('mano_model_path', '_DATA/data/mano')
-        cfg.MANO.GENDER = self.config.get('mano_gender', 'neutral')
-        cfg.MANO.NUM_HAND_JOINTS = self.config.get('num_hand_joints', 15)
+        cfg.MANO.DATA_DIR = data_config.get('mano_data_dir', '_DATA/data/')
+        cfg.MANO.MODEL_PATH = data_config.get('mano_model_path', '_DATA/data/mano')
+        cfg.MANO.GENDER = model_config.get('mano_gender', 'neutral')
+        cfg.MANO.NUM_HAND_JOINTS = model_config.get('num_hand_joints', 15)
         cfg.MANO.MEAN_PARAMS = self.config.get('mano_mean_params', '_DATA/data/mano_mean_params.npz')
         cfg.MANO.CREATE_BODY_POSE = self.config.get('create_body_pose', False)
         
@@ -179,9 +192,28 @@ class EnhancedHaWoRTrainer(pl.LightningModule):
         """Forward pass"""
         return self.model.forward_step(batch, train=self.training)
     
+    def _ensure_float32_batch(self, batch):
+        """Ensure all tensors in batch are float32 for MPS compatibility"""
+        for key, value in batch.items():
+            if isinstance(value, torch.Tensor):
+                if value.dtype == torch.float64:
+                    batch[key] = value.float()
+            elif isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    if isinstance(sub_value, torch.Tensor) and sub_value.dtype == torch.float64:
+                        batch[key][sub_key] = sub_value.float()
+        return batch
+
+    def on_before_batch_transfer(self, batch, dataloader_idx):
+        """Called before batch is transferred to device - ensures float32 compatibility"""
+        return self._ensure_float32_batch(batch)
+
     def training_step(self, batch, batch_idx):
         """Training step"""
-        
+
+        # Ensure all batch data is float32 for MPS compatibility
+        batch = self._ensure_float32_batch(batch)
+
         # Forward pass
         output = self.forward(batch)
         
@@ -224,7 +256,10 @@ class EnhancedHaWoRTrainer(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         """Validation step"""
-        
+
+        # Ensure all batch data is float32 for MPS compatibility
+        batch = self._ensure_float32_batch(batch)
+
         # Forward pass
         output = self.forward(batch)
         
@@ -403,9 +438,17 @@ class TrainingPipeline:
         self.logger = logging.getLogger(__name__)
         
         # Create output directories
-        self.output_dir = Path(self.config.get('output_dir', './training_output'))
+        self.output_dir = Path(self.config.get('output', {}).get('output_dir', './training_output'))
+        self.log_dir = Path(self.config.get('output', {}).get('log_dir', './training_logs'))
         self.output_dir.mkdir(exist_ok=True)
-        
+        self.log_dir.mkdir(exist_ok=True)
+
+        # Setup data directories
+        # Check both top-level and data section for backward compatibility
+        self.training_data_dir = Path(self.config.get('training_data_dir', self.config.get('data', {}).get('training_data_dir', './training_data')))
+        validation_dir = self.config.get('validation_data_dir', self.config.get('data', {}).get('validation_data_dir'))
+        self.validation_data_dir = Path(validation_dir) if validation_dir else None
+
         # Setup loggers
         self.loggers = self._setup_loggers()
         
@@ -482,7 +525,49 @@ class TrainingPipeline:
         callbacks.append(lr_monitor)
         
         return callbacks
-    
+
+    def validate_setup(self):
+        """Validate training setup without starting actual training"""
+
+        self.logger.info("Validating training setup...")
+
+        # Check configuration
+        training_config = self.config.get('training', {})
+        required_keys = ['batch_size', 'learning_rate', 'max_epochs']
+        missing_keys = [key for key in required_keys if key not in training_config]
+        if missing_keys:
+            raise ValueError(f"Missing required training config keys: {missing_keys}")
+
+        # Check data directories
+        if not self.training_data_dir.exists():
+            self.logger.warning(f"Training data directory not found: {self.training_data_dir}")
+
+        if self.validation_data_dir and not self.validation_data_dir.exists():
+            self.logger.warning(f"Validation data directory not found: {self.validation_data_dir}")
+
+        # Check output directories
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Try to create model (lightweight check)
+        try:
+            from lib.models.hawor import HAWOR
+            model_config = self.config.get('model', {})
+            # Don't actually create the model, just check the import works
+            self.logger.info("✅ Model import successful")
+        except Exception as e:
+            self.logger.error(f"❌ Model creation failed: {e}")
+            raise
+
+        # Check GPU availability if using GPU
+        if self.config.get('accelerator') == 'gpu' or (self.config.get('accelerator') == 'auto' and torch.cuda.is_available()):
+            if torch.cuda.is_available():
+                self.logger.info(f"✅ GPU available: {torch.cuda.get_device_name()}")
+            else:
+                self.logger.warning("⚠️ GPU requested but not available, will fall back to CPU")
+
+        self.logger.info("✅ Training setup validation completed successfully")
+
     def train(self):
         """Run training"""
         
@@ -490,26 +575,34 @@ class TrainingPipeline:
         self.logger.info(f"Configuration: {self.config}")
         
         # Create trainer
+        training_config = self.config.get('training', {})
+        evaluation_config = self.config.get('evaluation', {})
+        logging_config = self.config.get('logging', {})
+        hardware_config = self.config.get('hardware', {})
+
         trainer = pl.Trainer(
-            max_epochs=self.config.get('max_epochs', 100),
-            devices=self.config.get('devices', 1),
-            accelerator=self.config.get('accelerator', 'auto'),
-            precision=self.config.get('precision', 16),
-            gradient_clip_val=self.config.get('grad_clip_val', 0),
-            log_every_n_steps=self.config.get('log_every_n_steps', 50),
-            val_check_interval=self.config.get('val_check_interval', 1.0),
+            max_epochs=training_config.get('max_epochs', 100),
+            devices=hardware_config.get('devices', 1),
+            accelerator=hardware_config.get('accelerator', 'auto'),
+            precision=hardware_config.get('precision', 16),
+            gradient_clip_val=training_config.get('grad_clip_val', 0),
+            log_every_n_steps=logging_config.get('log_every_n_steps', 50),
+            val_check_interval=evaluation_config.get('val_check_interval', 1.0),
             callbacks=self.callbacks,
             logger=self.loggers,
             default_root_dir=self.output_dir
         )
         
         # Create model
+        training_config = self.config.get('training', {})
+        loss_config = self.config.get('loss', {})
+
         model = EnhancedHaWoRTrainer(
             config=self.config,
-            training_data_dir=self.config.get('training_data_dir'),
-            validation_data_dir=self.config.get('validation_data_dir'),
-            use_enhanced_loss=self.config.get('use_enhanced_loss', True),
-            use_adaptive_weights=self.config.get('use_adaptive_weights', True)
+            training_data_dir=self.training_data_dir,
+            validation_data_dir=self.validation_data_dir,
+            use_enhanced_loss=loss_config.get('use_enhanced_loss', True),
+            use_adaptive_weights=loss_config.get('use_adaptive_weights', True)
         )
         
         # Start training

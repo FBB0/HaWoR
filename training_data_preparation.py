@@ -24,9 +24,7 @@ import h5py
 # Add HaWoR to path
 sys.path.append(str(Path(__file__).parent))
 
-from lib.utils.geometry import perspective_projection
-from lib.utils.rotation import rotation_matrix_to_angle_axis
-from hawor.utils.rotation import angle_axis_to_rotation_matrix
+from lib.utils.geometry import perspective_projection, rotation_matrix_to_angle_axis
 
 @dataclass
 class TrainingSample:
@@ -173,11 +171,17 @@ class ArcticDataConverter:
     
     def _get_available_subjects(self) -> List[str]:
         """Get list of available subjects"""
-        raw_seqs_dir = self.arctic_root / "raw_seqs"
-        if not raw_seqs_dir.exists():
-            raise FileNotFoundError(f"ARCTIC raw_seqs directory not found: {raw_seqs_dir}")
+        if not self.arctic_root.exists():
+            raise FileNotFoundError(f"ARCTIC root directory not found: {self.arctic_root}")
         
-        subjects = [d.name for d in raw_seqs_dir.iterdir() if d.is_dir() and d.name.startswith('s')]
+        # Look for subjects in raw_seqs directory
+        raw_seqs_dir = self.arctic_root / "raw_seqs"
+        if raw_seqs_dir.exists():
+            subjects = [d.name for d in raw_seqs_dir.iterdir() if d.is_dir() and d.name.startswith('s')]
+        else:
+            # Fallback to root directory
+            subjects = [d.name for d in self.arctic_root.iterdir() if d.is_dir() and d.name.startswith('s')]
+        
         return sorted(subjects)
     
     def _convert_subject(self, 
@@ -291,7 +295,7 @@ class ArcticDataConverter:
         object_file = seq_path / f"{sequence}.object.npy"
         object_data = None
         if object_file.exists():
-            object_data = np.load(object_file, allow_pickle=True).item()
+            object_data = np.load(object_file, allow_pickle=True)  # Don't use .item() for object data
         
         return {
             'mano': mano_data,
@@ -301,15 +305,16 @@ class ArcticDataConverter:
             'sequence': sequence
         }
     
-    def _convert_arctic_to_training_samples(self, 
-                                          arctic_data: Dict, 
-                                          subject: str, 
+    def _convert_arctic_to_training_samples(self,
+                                          arctic_data: Dict,
+                                          subject: str,
                                           sequence: str) -> List[TrainingSample]:
         """Convert ARCTIC data to training samples"""
-        
-        mano_data = arctic_data['mano']
+
+        # ARCTIC data has both left and right hands, we use right hand
+        mano_data = arctic_data['mano']['right']
         egocam_data = arctic_data['egocam']
-        
+
         # Get sequence length
         seq_len = len(mano_data['rot'])
         
@@ -321,34 +326,37 @@ class ArcticDataConverter:
                 sample = self._create_training_sample(
                     arctic_data, frame_idx, subject, sequence
                 )
-                
+
                 if sample is not None:
                     training_samples.append(sample)
-                    
+
             except Exception as e:
+                import traceback
                 self.logger.warning(f"Failed to create sample for {subject}/{sequence}/{frame_idx}: {e}")
+                self.logger.warning(f"Full traceback: {traceback.format_exc()}")
                 continue
         
         return training_samples
     
-    def _create_training_sample(self, 
-                               arctic_data: Dict, 
+    def _create_training_sample(self,
+                               arctic_data: Dict,
                                frame_idx: int,
-                               subject: str, 
+                               subject: str,
                                sequence: str) -> Optional[TrainingSample]:
         """Create a single training sample"""
-        
-        mano_data = arctic_data['mano']
+
+        # Use right hand data from ARCTIC
+        mano_data = arctic_data['mano']['right']
         egocam_data = arctic_data['egocam']
         
         # Extract frame data
         global_orient = mano_data['rot'][frame_idx]  # [3] axis-angle
         hand_pose = mano_data['pose'][frame_idx]  # [45] hand pose
-        betas = mano_data['shape'][frame_idx]  # [10] shape parameters
+        betas = mano_data['shape']  # [10] shape parameters (per-subject, not per-frame)
         trans = mano_data['trans'][frame_idx]  # [3] translation
         
         # Camera parameters
-        intrinsics = egocam_data['intrinsics']  # [3, 3]
+        intrinsics = np.array(egocam_data['intrinsics'], dtype=np.float32)  # [3, 3] - convert from list
         R = egocam_data['R_k_cam_np'][frame_idx]  # [3, 3]
         T = egocam_data['T_k_cam_np'][frame_idx]  # [3, 1]
         
@@ -403,11 +411,15 @@ class ArcticDataConverter:
                                frame_idx: int) -> Optional[np.ndarray]:
         """Load and process image for training"""
         
-        # Try different image paths
+        # Try different image paths - ARCTIC images are in cropped_images_zips directory
+        # The cropped_images_zips is in the downloads directory at the arctic root level
+        downloads_root = self.arctic_root.parent.parent.parent / "downloads" / "data"
         image_paths = [
-            self.arctic_root / "cropped_images" / subject / sequence / "0" / f"{frame_idx:06d}.jpg",
+            downloads_root / "cropped_images_zips" / subject / sequence / "0" / f"{frame_idx:05d}.jpg",
+            downloads_root / "cropped_images_zips" / subject / sequence / "0" / f"{frame_idx:06d}.jpg",
             self.arctic_root / "cropped_images" / subject / sequence / f"{frame_idx:06d}.jpg",
-            self.arctic_root / "images" / subject / sequence / f"{frame_idx:06d}.jpg"
+            self.arctic_root / "images" / subject / sequence / f"{frame_idx:06d}.jpg",
+            self.arctic_root / "raw_seqs" / subject / sequence / f"{frame_idx:06d}.jpg"
         ]
         
         image_path = None
@@ -544,9 +556,30 @@ class ArcticDataConverter:
         
         # Save images and annotations
         for sample in samples:
-            # Save image
+            # Copy original image instead of processing it
+            # Try to find the actual image in cropped_images_zips first
+            downloads_root = self.arctic_root.parent.parent.parent / "downloads" / "data"
+            original_image_paths = [
+                downloads_root / "cropped_images_zips" / subject / sequence / "0" / f"{sample.frame_id:05d}.jpg",
+                downloads_root / "cropped_images_zips" / subject / sequence / "0" / f"{sample.frame_id:06d}.jpg",
+                self.arctic_root / "cropped_images" / subject / sequence / f"{sample.frame_id:06d}.jpg"
+            ]
+            
             image_path = sequence_dir / f"{sample.frame_id:06d}.jpg"
-            cv2.imwrite(str(image_path), cv2.cvtColor(sample.image, cv2.COLOR_RGB2BGR))
+            original_image_path = None
+            
+            for path in original_image_paths:
+                if path.exists():
+                    original_image_path = path
+                    break
+            
+            if original_image_path:
+                # Copy the original image without any processing
+                import shutil
+                shutil.copy2(original_image_path, image_path)
+            else:
+                # Fallback to processed image if original not found
+                cv2.imwrite(str(image_path), cv2.cvtColor(sample.image, cv2.COLOR_RGB2BGR))
             
             # Save annotation
             annotation_path = self.output_dir / 'annotations' / subject / f"{sequence}_{sample.frame_id:06d}.json"
@@ -602,12 +635,12 @@ class TrainingDataset:
         self.transform = transform
         self.target_resolution = target_resolution
         
-        # Load dataset metadata
-        self.samples = self._load_dataset_metadata()
-        
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
+
+        # Load dataset metadata
+        self.samples = self._load_dataset_metadata()
     
     def _load_dataset_metadata(self) -> List[Dict]:
         """Load dataset metadata"""
@@ -681,6 +714,11 @@ class TrainingDataset:
         image_path = self.data_dir / sample_meta['image_path']
         image = cv2.imread(str(image_path))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Ensure target resolution if specified
+        if self.target_resolution is not None:
+            w_expected, h_expected = self.target_resolution[0], self.target_resolution[1]
+            if image.shape[1] != w_expected or image.shape[0] != h_expected:
+                image = cv2.resize(image, (w_expected, h_expected))
         
         # Load annotation
         annotation_path = self.data_dir / sample_meta['annotation_path']
@@ -688,9 +726,40 @@ class TrainingDataset:
             annotation = json.load(f)
         
         # Convert to tensors
+        # Extract focal length and center from intrinsics matrix
+        intrinsics = torch.tensor(annotation['intrinsics'], dtype=torch.float32)
+        focal_length = intrinsics[0, 0].clone().detach()  # fx (assuming fx = fy)
+        img_center = torch.tensor([intrinsics[0, 2].item(), intrinsics[1, 2].item()], dtype=torch.float32).unsqueeze(0)  # cx, cy with batch dimension
+
+        # Compute center and scale from keypoints 2D for normalization
+        keypoints_2d = np.array(annotation['keypoints_2d'], dtype=np.float32)
+        # Compute bounding box from 2D keypoints (ignoring outliers)
+        valid_kpts = keypoints_2d[np.isfinite(keypoints_2d).all(axis=1)]
+        if len(valid_kpts) > 0:
+            x_min, y_min = valid_kpts.min(axis=0)
+            x_max, y_max = valid_kpts.max(axis=0)
+            # Add some padding
+            padding = 50
+            x_min = max(0, x_min - padding)
+            y_min = max(0, y_min - padding)
+            x_max = min(annotation.get('image_width', 2048), x_max + padding)
+            y_max = min(annotation.get('image_height', 2048), y_max + padding)
+            bbox = [x_min, y_min, x_max - x_min, y_max - y_min]
+        else:
+            # Fallback to center crop if no valid keypoints
+            img_h, img_w = 256, 256  # target resolution
+            bbox = [img_w//4, img_h//4, img_w//2, img_h//2]
+
+        center = torch.tensor([bbox[0] + bbox[2]/2, bbox[1] + bbox[3]/2], dtype=torch.float32).unsqueeze(0)
+        scale = torch.tensor([max(bbox[2], bbox[3])], dtype=torch.float32).unsqueeze(0)
+
         sample = {
-            'image': torch.from_numpy(image).permute(2, 0, 1).float() / 255.0,
-            'intrinsics': torch.tensor(annotation['intrinsics'], dtype=torch.float32),
+            'img': torch.from_numpy(image).permute(2, 0, 1).float() / 255.0,
+            'img_focal': torch.tensor([focal_length.item()], dtype=torch.float32),
+            'img_center': img_center,
+            'center': center,
+            'scale': scale,
+            'intrinsics': intrinsics,
             'camera_pose': {
                 'R': torch.tensor(annotation['camera_pose']['R'], dtype=torch.float32),
                 'T': torch.tensor(annotation['camera_pose']['T'], dtype=torch.float32)

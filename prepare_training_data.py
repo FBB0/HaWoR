@@ -34,19 +34,22 @@ def main():
     train_subjects = ["s01", "s02", "s04", "s05", "s06", "s07"]
     train_stats = converter.convert_dataset(
         subjects=train_subjects,
-        max_sequences_per_subject=15,
-        output_split="train"
+        max_sequences_per_subject=15
     )
     print(f"Training data conversion completed: {train_stats}")
 
     # Convert validation data (remaining 20%)
     print("\n2️⃣  Converting validation data...")
-    converter.output_dir = validation_output
+    converter.output_dir = Path(validation_output)
+    converter.output_dir.mkdir(exist_ok=True)
+    (converter.output_dir / 'images').mkdir(exist_ok=True)
+    (converter.output_dir / 'annotations').mkdir(exist_ok=True)
+    (converter.output_dir / 'masks').mkdir(exist_ok=True)
+
     val_subjects = ["s08", "s09", "s10"]
     val_stats = converter.convert_dataset(
         subjects=val_subjects,
-        max_sequences_per_subject=5,
-        output_split="val"
+        max_sequences_per_subject=5
     )
     print(f"Validation data conversion completed: {val_stats}")
 

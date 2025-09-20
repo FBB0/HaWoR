@@ -1,0 +1,82 @@
+{
+  "data": {
+    "arctic_data_root": "thirdparty/arctic/unpack/arctic_data/data",
+    "training_data_dir": "test_output",
+    "validation_data_dir": "test_output",
+    "mano_data_dir": "_DATA/data",
+    "mano_model_path": "_DATA/data/mano",
+    "image_size": 256,
+    "num_workers": 1,
+    "pin_memory": false,
+    "prefetch_factor": 1
+  },
+  "model": {
+    "backbone_type": "vit",
+    "pretrained_weights": "weights/hawor/checkpoints/hawor.ckpt",
+    "torch_compile": 0,
+    "mano_gender": "neutral",
+    "num_hand_joints": 15,
+    "st_module": true,
+    "motion_module": true,
+    "st_hdim": 256,
+    "motion_hdim": 192,
+    "st_nlayer": 4,
+    "motion_nlayer": 4
+  },
+  "training": {
+    "max_epochs": 1,
+    "batch_size": 1,
+    "learning_rate": 1e-04,
+    "weight_decay": 0.0001,
+    "grad_clip_val": 1.0,
+    "warmup_epochs": 0,
+    "early_stopping_patience": 1,
+    "accumulate_grad_batches": 1
+  },
+  "loss": {
+    "use_enhanced_loss": false,
+    "use_adaptive_weights": false,
+    "temporal_window": 3,
+    "weights": {
+      "KEYPOINTS_3D": 0.1,
+      "KEYPOINTS_2D": 0.05,
+      "GLOBAL_ORIENT": 0.01,
+      "HAND_POSE": 0.01,
+      "BETAS": 0.005,
+      "MESH_VERTICES": 0.02,
+      "MESH_FACES": 0.01
+    }
+  },
+  "evaluation": {
+    "eval_every_n_epochs": 1,
+    "val_check_interval": 1.0,
+    "eval_metrics": [
+      "mpjpe_3d",
+      "pck_3d_15mm"
+    ]
+  },
+  "logging": {
+    "use_tensorboard": true,
+    "use_wandb": false,
+    "tensorboard_log_dir": "logs/tensorboard",
+    "log_every_n_steps": 1,
+    "log_images_every_n_steps": 10,
+    "render_frequency": 20
+  },
+  "hardware": {
+    "devices": 1,
+    "accelerator": "mps",
+    "precision": "32",
+    "find_unused_parameters": false
+  },
+  "output": {
+    "output_dir": "test_training_output",
+    "log_dir": "test_training_logs",
+    "checkpoint_dir": "test_checkpoints",
+    "report_dir": "test_reports",
+    "save_top_k": 1,
+    "save_every_n_epochs": 1,
+    "monitor": "val/loss",
+    "mode": "min"
+  }
+}

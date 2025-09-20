@@ -78,9 +78,45 @@ ipython_config.py
 vis.mp4
 imgui.ini
 
-# Our additions for custom implementation
+# Large datasets and model weights (should be downloaded separately)
+/thirdparty/
+/weights/
+/training_data/
+/output/
+
+# Training and experiment outputs
+/training_logs/
+/logs/
+/checkpoints/
+/experiments/
+/arctic_comparison_results/
+/baseline_evaluation/
+/eddy_xu_output/
+/evaluation_results/
+/mesh_visualizations/
+/reports/
+
+# Generated documentation and reports
+*_SUMMARY.md
+*_REPORT.md
+*_ANALYSIS.md
+*_FIX_SUMMARY.md
+*_SUCCESS*.md
+*_COMPLETION*.md
+*_IMPROVEMENTS*.md
+*_TECHNICAL*.md
+*_FINAL*.md
+*_DEVELOPER*.md
+*_MACBOOK*.md
+
+# Test and temporary outputs
 *_output/
 *_test/
+test_*/
+*_vis/
+*_visualization*/
+
+# Our additions for custom implementation
 example_outputs/
 batch_output/
 hawor_output_*/
@@ -93,10 +129,59 @@ advanced_test/
 hawor/
 venv/
 env/
+hawor-env/
 
 # Processing results
 *.npz
 batch_summary.json
+
+# Large data files
+*.npy
+*.pkl
+*.pth
+*.ckpt
+*.pt
+*.zip
+*.tar.gz
+*.mov
+*.mp4
+*.avi
+
+# Cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+.pytest_cache/
+.coverage
+.tox/
+.cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
 
 # Temporary files
 *.tmp

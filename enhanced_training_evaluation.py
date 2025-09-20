@@ -209,22 +209,12 @@ class EnhancedTrainingLoss(nn.Module):
                                 pred_keypoints_2d: torch.Tensor,
                                 gt_keypoints_2d: torch.Tensor,
                                 valid_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """Enhanced 2D keypoint loss"""
-        
+        """Enhanced 2D keypoint loss in normalized crop coordinates"""
         if valid_mask is not None:
             pred_keypoints_2d = pred_keypoints_2d[valid_mask]
             gt_keypoints_2d = gt_keypoints_2d[valid_mask]
-        
         if pred_keypoints_2d.shape[0] == 0:
             return torch.tensor(0.0, device=pred_keypoints_2d.device)
-        
-        # Robust 2D loss with outlier handling
-        errors = torch.norm(pred_keypoints_2d - gt_keypoints_2d, dim=-1)
-        
-        # Use robust statistics
-        median_error = torch.median(errors)
-        mad = torch.median(torch.abs(errors - median_error))
-        
         # Huber loss for robustness
         return self.huber_loss(pred_keypoints_2d, gt_keypoints_2d)
     
@@ -297,12 +287,17 @@ class EnhancedTrainingLoss(nn.Module):
         return pred_aligned, gt_centered
     
     def angular_distance_loss(self, pred_rot: torch.Tensor, gt_rot: torch.Tensor) -> torch.Tensor:
-        """Angular distance loss for rotations"""
-        # Convert to rotation matrices if needed
-        if pred_rot.shape[-1] == 3:  # axis-angle
-            pred_rot = angle_axis_to_rotation_matrix(pred_rot)
-        if gt_rot.shape[-1] == 3:  # axis-angle
-            gt_rot = angle_axis_to_rotation_matrix(gt_rot)
+        """Angular distance loss for rotations.
+        Accepts either axis-angle (...,3) or rotation matrices (...,3,3)."""
+        def to_rotmat(x: torch.Tensor) -> torch.Tensor:
+            # If already rotation matrices (...,3,3), return as is; if axis-angle (...,3), convert
+            if x.dim() >= 3 and x.shape[-2:] == (3, 3):
+                return x
+            if x.shape[-1] == 3:
+                return angle_axis_to_rotation_matrix(x)
+            raise ValueError(f"Unsupported rotation tensor shape: {tuple(x.shape)}")
+        pred_rot = to_rotmat(pred_rot)
+        gt_rot = to_rotmat(gt_rot)
         
         # Compute angular distance
         R_diff = torch.bmm(pred_rot, gt_rot.transpose(-1, -2))
@@ -322,56 +317,118 @@ class EnhancedTrainingLoss(nn.Module):
         """Compute total enhanced loss"""
         
         losses = {}
-        total_loss = torch.tensor(0.0, device=next(iter(pred_output.values())).device)
+        # Choose a tensor from pred_output to place the loss on the correct device
+        first_tensor = None
+        for v in pred_output.values():
+            if isinstance(v, torch.Tensor):
+                first_tensor = v
+                break
+        device = first_tensor.device if first_tensor is not None else 'cpu'
+        total_loss = torch.tensor(0.0, device=device)
         
         # Get current weights
         weights = self.get_loss_weights()
         
         # 3D Keypoint Loss
-        if 'pred_keypoints_3d' in pred_output and 'gt_keypoints_3d' in gt_data:
+        gt_kp3d = gt_data.get('gt_keypoints_3d', gt_data.get('keypoints_3d'))
+        if 'pred_keypoints_3d' in pred_output and gt_kp3d is not None:
             losses['keypoints_3d'] = self.compute_keypoint_3d_loss(
                 pred_output['pred_keypoints_3d'],
-                gt_data['gt_keypoints_3d'],
+                gt_kp3d,
                 valid_mask
             )
             total_loss += weights['KEYPOINTS_3D'] * losses['keypoints_3d']
         
         # 2D Keypoint Loss
-        if 'pred_keypoints_2d' in pred_output and 'gt_keypoints_2d' in gt_data:
+        gt_kp2d = gt_data.get('gt_keypoints_2d', gt_data.get('keypoints_2d'))
+        if 'pred_keypoints_2d' in pred_output and gt_kp2d is not None:
+            # Normalize GT 2D to match model output space: [-0.5, 0.5] on crop
+            pred2d = pred_output['pred_keypoints_2d']
+            center = gt_data.get('center')
+            scale = gt_data.get('scale')
+            img = gt_data.get('img')
+            if center is not None and scale is not None and img is not None:
+                crop_size = img.shape[-1]
+                # Normalize shapes to (B,2) and (B,1)
+                if center.dim() == 3:
+                    center = center.squeeze(1)
+                if scale.dim() == 3:
+                    scale = scale.squeeze(1)
+                b = scale.squeeze(-1) * 200.0 if scale.dim() == 2 else scale * 200.0
+                # Broadcast shapes
+                center_b = center.unsqueeze(1)  # (B,1,2)
+                b_b = b.view(-1, 1, 1)         # (B,1,1)
+                gt2d = gt_kp2d
+                if not isinstance(gt2d, torch.Tensor):
+                    gt2d = torch.tensor(gt2d, dtype=pred2d.dtype, device=pred2d.device)
+                # Normalize
+                gt2d_norm = (gt2d - (center_b - b_b/2.0)) * (crop_size / b_b)
+                gt2d_norm = gt2d_norm / crop_size - 0.5
+                # Ensure shape matches prediction (B, J, 2)
+                if gt2d_norm.dim() != pred2d.dim():
+                    gt2d_norm = gt2d_norm.view(*pred2d.shape)
+            else:
+                gt2d_norm = gt_kp2d if isinstance(gt_kp2d, torch.Tensor) else torch.tensor(gt_kp2d, dtype=pred2d.dtype, device=pred2d.device)
+
             losses['keypoints_2d'] = self.compute_keypoint_2d_loss(
-                pred_output['pred_keypoints_2d'],
-                gt_data['gt_keypoints_2d'],
+                pred2d,
+                gt2d_norm,
                 valid_mask
             )
             total_loss += weights['KEYPOINTS_2D'] * losses['keypoints_2d']
         
         # MANO Parameter Losses
-        if 'pred_mano_params' in pred_output and 'gt_mano_params' in gt_data:
+        gt_mano = gt_data.get('gt_mano_params', gt_data.get('mano_params'))
+        if 'pred_mano_params' in pred_output and gt_mano is not None:
             pred_mano = pred_output['pred_mano_params']
-            gt_mano = gt_data['gt_mano_params']
             
             for param_name in ['global_orient', 'hand_pose', 'betas']:
                 if param_name in pred_mano and param_name in gt_mano:
                     param_type = 'global_orient' if param_name == 'global_orient' else 'pose' if param_name == 'hand_pose' else 'shape'
+                    pred_param = pred_mano[param_name]
+                    gt_param = gt_mano[param_name]
+                    # Normalize shapes for loss computation
+                    if param_name == 'global_orient':
+                        # Either axis-angle (...,3) or rotation matrices (...,3,3)
+                        if pred_param.dim() == 4 and pred_param.shape[1] == 1:
+                            pred_param = pred_param.squeeze(1)
+                        if gt_param.dim() == 4 and gt_param.shape[1] == 1:
+                            gt_param = gt_param.squeeze(1)
+                    else:
+                        if param_name == 'hand_pose':
+                            # Convert rotation matrices (B,15,3,3) to axis-angle (B,15,3) to match gt
+                            if pred_param.dim() == 4 and pred_param.shape[1] == 15:
+                                B = pred_param.shape[0]
+                                pred_param = rotation_matrix_to_angle_axis(pred_param.reshape(B*15, 3, 3)).reshape(B, 15, 3)
+                            # Ensure gt is (B,15,3)
+                            if gt_param.dim() == 2 and gt_param.shape[1] == 45:
+                                gt_param = gt_param.reshape(gt_param.shape[0], 15, 3)
+                            pred_param = pred_param.reshape(pred_param.shape[0], -1)
+                            gt_param = gt_param.reshape(gt_param.shape[0], -1)
+                        else:
+                            pred_param = pred_param.reshape(pred_param.shape[0], -1)
+                            gt_param = gt_param.reshape(gt_param.shape[0], -1)
                     losses[f'mano_{param_name}'] = self.compute_mano_parameter_loss(
-                        pred_mano[param_name].reshape(pred_mano[param_name].shape[0], -1),
-                        gt_mano[param_name].reshape(gt_mano[param_name].shape[0], -1),
+                        pred_param,
+                        gt_param,
                         param_type
                     )
                     weight_key = param_name.upper() if param_name != 'hand_pose' else 'HAND_POSE'
                     total_loss += weights[weight_key] * losses[f'mano_{param_name}']
         
         # Mesh Loss
-        if 'pred_vertices' in pred_output and 'gt_vertices' in gt_data:
+        gt_vertices = gt_data.get('gt_vertices', gt_data.get('vertices'))
+        gt_faces = gt_data.get('gt_faces', gt_data.get('faces'))
+        if 'pred_vertices' in pred_output and gt_vertices is not None:
             mesh_losses = self.compute_mesh_loss(
                 pred_output['pred_vertices'],
-                gt_data['gt_vertices'],
+                gt_vertices,
                 pred_output.get('pred_faces'),
-                gt_data.get('gt_faces')
+                gt_faces
             )
             for mesh_loss_name, mesh_loss_value in mesh_losses.items():
                 losses[f'mesh_{mesh_loss_name}'] = mesh_loss_value
-                total_loss += weights['MESH_VERTICES'] * mesh_loss_value
+                total_loss += weights.get('MESH_' + mesh_loss_name.upper(), 0.0) * mesh_loss_value
         
         # Temporal Consistency Loss
         if 'pred_sequence' in pred_output:
@@ -388,7 +445,7 @@ class EnhancedTrainingLoss(nn.Module):
             total_loss += weights['OCCLUSION_ROBUSTNESS'] * losses['occlusion_robustness']
         
         # Add weighted losses to output
-        for loss_name, loss_value in losses.items():
+        for loss_name, loss_value in list(losses.items()):
             losses[f'weighted_{loss_name}'] = loss_value * weights.get(loss_name.upper(), 1.0)
         
         losses['total_loss'] = total_loss
@@ -553,67 +610,110 @@ class TrainingEvaluator:
     def _compute_keypoint_metrics(self, batch: Dict, output: Dict, metrics: TrainingMetrics):
         """Compute keypoint-related metrics"""
         
-        if 'pred_keypoints_3d' in output and 'gt_keypoints_3d' in batch:
+        if 'pred_keypoints_3d' in output:
             pred_kp_3d = output['pred_keypoints_3d']
-            gt_kp_3d = batch['gt_keypoints_3d']
-            
-            # MPJPE
-            errors_3d = torch.norm(pred_kp_3d - gt_kp_3d, dim=-1)
-            metrics.mpjpe_3d = errors_3d.mean().item()
-            
-            # PCK metrics
-            metrics.pck_3d_5mm = (errors_3d < 0.005).float().mean().item()
-            metrics.pck_3d_10mm = (errors_3d < 0.010).float().mean().item()
-            metrics.pck_3d_15mm = (errors_3d < 0.015).float().mean().item()
-            metrics.pck_3d_20mm = (errors_3d < 0.020).float().mean().item()
+            gt_kp_3d = batch.get('gt_keypoints_3d', batch.get('keypoints_3d'))
+            if gt_kp_3d is not None:
+                
+                # MPJPE
+                errors_3d = torch.norm(pred_kp_3d - gt_kp_3d, dim=-1)
+                metrics.mpjpe_3d = errors_3d.mean().item()
+                
+                # PCK metrics
+                metrics.pck_3d_5mm = (errors_3d < 0.005).float().mean().item()
+                metrics.pck_3d_10mm = (errors_3d < 0.010).float().mean().item()
+                metrics.pck_3d_15mm = (errors_3d < 0.015).float().mean().item()
+                metrics.pck_3d_20mm = (errors_3d < 0.020).float().mean().item()
         
-        if 'pred_keypoints_2d' in output and 'gt_keypoints_2d' in batch:
+        if 'pred_keypoints_2d' in output:
             pred_kp_2d = output['pred_keypoints_2d']
-            gt_kp_2d = batch['gt_keypoints_2d']
-            
-            # MPJPE 2D
-            errors_2d = torch.norm(pred_kp_2d - gt_kp_2d, dim=-1)
-            metrics.mpjpe_2d = errors_2d.mean().item()
-            
-            # PCK 2D
-            metrics.pck_2d_5px = (errors_2d < 5.0).float().mean().item()
-            metrics.pck_2d_10px = (errors_2d < 10.0).float().mean().item()
-            metrics.pck_2d_15px = (errors_2d < 15.0).float().mean().item()
+            gt_kp_2d = batch.get('gt_keypoints_2d', batch.get('keypoints_2d'))
+            if gt_kp_2d is not None:
+                center = batch.get('center')
+                scale = batch.get('scale')
+                img = batch.get('img')
+                crop_size = img.shape[-1] if isinstance(img, torch.Tensor) else 256
+                if isinstance(gt_kp_2d, torch.Tensor):
+                    gt2d = gt_kp_2d
+                else:
+                    gt2d = torch.tensor(gt_kp_2d, dtype=pred_kp_2d.dtype, device=pred_kp_2d.device)
+                if center is not None and scale is not None:
+                    if center.dim() == 3:
+                        center = center.squeeze(1)
+                    if scale.dim() == 3:
+                        scale = scale.squeeze(1)
+                    b = scale.squeeze(-1) * 200.0 if scale.dim() == 2 else scale * 200.0
+                    center_b = center.unsqueeze(1)
+                    b_b = b.view(-1, 1, 1)
+                    gt2d_norm = (gt2d - (center_b - b_b/2.0)) * (crop_size / b_b)
+                    gt2d_norm = gt2d_norm / crop_size - 0.5
+                    if gt2d_norm.dim() != pred_kp_2d.dim():
+                        gt2d_norm = gt2d_norm.view(*pred_kp_2d.shape)
+                else:
+                    gt2d_norm = gt2d
+                # MPJPE 2D in normalized coordinates (pixels on crop)
+                errors_2d = torch.norm(pred_kp_2d - gt2d_norm, dim=-1)
+                metrics.mpjpe_2d = errors_2d.mean().item()
+                # PCK thresholds in normalized units equivalent to 5/10/15 px on crop
+                px5 = 5.0 / crop_size
+                px10 = 10.0 / crop_size
+                px15 = 15.0 / crop_size
+                metrics.pck_2d_5px = (errors_2d < px5).float().mean().item()
+                metrics.pck_2d_10px = (errors_2d < px10).float().mean().item()
+                metrics.pck_2d_15px = (errors_2d < px15).float().mean().item()
     
     def _compute_mano_metrics(self, batch: Dict, output: Dict, metrics: TrainingMetrics):
         """Compute MANO parameter metrics"""
         
-        if 'pred_mano_params' in output and 'gt_mano_params' in batch:
+        if 'pred_mano_params' in output:
             pred_mano = output['pred_mano_params']
-            gt_mano = batch['gt_mano_params']
-            
-            for param_name in ['global_orient', 'hand_pose', 'betas']:
-                if param_name in pred_mano and param_name in gt_mano:
-                    pred_param = pred_mano[param_name]
-                    gt_param = gt_mano[param_name]
-                    
-                    error = torch.norm(pred_param - gt_param, dim=-1).mean().item()
-                    
-                    if param_name == 'global_orient':
-                        metrics.mano_global_orient_error = error
-                    elif param_name == 'hand_pose':
-                        metrics.mano_pose_error = error
-                    elif param_name == 'betas':
-                        metrics.mano_shape_error = error
+            gt_mano = batch.get('gt_mano_params', batch.get('mano_params'))
+            if gt_mano is not None:
+                # Global orientation angular error
+                if 'global_orient' in pred_mano and 'global_orient' in gt_mano:
+                    pred_go = pred_mano['global_orient']
+                    gt_go = gt_mano['global_orient']
+                    if pred_go.dim() == 4 and pred_go.shape[1] == 1:
+                        pred_go = pred_go.squeeze(1)
+                    if gt_go.dim() == 2 and gt_go.shape[1] == 3:
+                        gt_go_rm = angle_axis_to_rotation_matrix(gt_go)
+                    else:
+                        gt_go_rm = gt_go
+                    metrics.mano_global_orient_error = self._angular_distance(pred_go, gt_go_rm).item()
+                
+                # Hand pose angular error (average over joints)
+                if 'hand_pose' in pred_mano and 'hand_pose' in gt_mano:
+                    pred_hp = pred_mano['hand_pose']  # (B,15,3,3)
+                    gt_hp = gt_mano['hand_pose']      # (B,45) or (B,15,3)
+                    B = pred_hp.shape[0]
+                    if gt_hp.dim() == 2 and gt_hp.shape[1] == 45:
+                        gt_hp = gt_hp.reshape(B, 15, 3)
+                    gt_hp_rm = angle_axis_to_rotation_matrix(gt_hp.reshape(B*15, 3)).reshape(B, 15, 3, 3)
+                    ang = self._angular_distance(
+                        pred_hp.reshape(B*15, 3, 3),
+                        gt_hp_rm.reshape(B*15, 3, 3)
+                    )
+                    metrics.mano_pose_error = ang.item()
+                
+                # Shape parameter L2 error
+                if 'betas' in pred_mano and 'betas' in gt_mano:
+                    pred_b = pred_mano['betas'].reshape(pred_mano['betas'].shape[0], -1)
+                    gt_b = gt_mano['betas'].reshape(gt_mano['betas'].shape[0], -1)
+                    metrics.mano_shape_error = torch.norm(pred_b - gt_b, dim=-1).mean().item()
     
     def _compute_mesh_metrics(self, batch: Dict, output: Dict, metrics: TrainingMetrics):
         """Compute mesh quality metrics"""
         
-        if 'pred_vertices' in output and 'gt_vertices' in batch:
+        if 'pred_vertices' in output:
             pred_verts = output['pred_vertices']
-            gt_verts = batch['gt_vertices']
-            
-            # Vertex error
-            metrics.mesh_vertices_error = torch.norm(pred_verts - gt_verts, dim=-1).mean().item()
-            
-            # Surface error (Chamfer distance)
-            chamfer_loss = ChamferDistanceLoss()
-            metrics.mesh_surface_error = chamfer_loss(pred_verts, gt_verts).item()
+            gt_verts = batch.get('gt_vertices', batch.get('vertices'))
+            if gt_verts is not None:
+                # Vertex error
+                metrics.mesh_vertices_error = torch.norm(pred_verts - gt_verts, dim=-1).mean().item()
+                
+                # Surface error (Chamfer distance)
+                chamfer_loss = ChamferDistanceLoss()
+                metrics.mesh_surface_error = chamfer_loss(pred_verts, gt_verts).item()
     
     def _compute_temporal_metrics(self, batch: Dict, output: Dict, metrics: TrainingMetrics):
         """Compute temporal consistency metrics"""
@@ -657,10 +757,11 @@ class TrainingEvaluator:
     def _get_learning_rates(self) -> Dict[str, float]:
         """Get current learning rates"""
         learning_rates = {}
-        
-        for i, optimizer in enumerate(self.model.optimizers()):
-            learning_rates[f'optimizer_{i}'] = optimizer.param_groups[0]['lr']
-        
+        try:
+            for i, optimizer in enumerate(self.model.optimizers()):
+                learning_rates[f'optimizer_{i}'] = optimizer.param_groups[0]['lr']
+        except Exception:
+            pass
         return learning_rates
     
     def _measure_inference_time(self, batch: Dict, output: Dict) -> float:
@@ -673,6 +774,21 @@ class TrainingEvaluator:
         if torch.cuda.is_available():
             return torch.cuda.memory_allocated() / 1024**3  # GB
         return 0.0
+
+    def _angular_distance(self, pred_rot: torch.Tensor, gt_rot: torch.Tensor) -> torch.Tensor:
+        """Angular distance between rotations; accepts axis-angle (...,3) or rotmat (...,3,3)."""
+        def to_rotmat(x: torch.Tensor) -> torch.Tensor:
+            if x.dim() >= 3 and x.shape[-2:] == (3, 3):
+                return x
+            if x.shape[-1] == 3:
+                return angle_axis_to_rotation_matrix(x)
+            raise ValueError(f"Unsupported rotation tensor shape: {tuple(x.shape)}")
+        pr = to_rotmat(pred_rot)
+        gr = to_rotmat(gt_rot)
+        R_diff = torch.bmm(pr, gr.transpose(-1, -2))
+        trace = torch.diagonal(R_diff, dim1=-2, dim2=-1).sum(-1)
+        angles = torch.acos(torch.clamp((trace - 1) / 2, -1, 1))
+        return angles.mean()
     
     def _log_metrics(self, metrics: TrainingMetrics, step: int, epoch: int, is_training: bool):
         """Log metrics to various backends"""
