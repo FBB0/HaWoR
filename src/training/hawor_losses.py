@@ -18,13 +18,13 @@ class HaWoRLossFunction(nn.Module):
     """
 
     def __init__(self,
-                 lambda_keypoint: float = 10.0,
-                 lambda_mano_pose: float = 1.0,
-                 lambda_mano_shape: float = 0.1,
-                 lambda_temporal: float = 5.0,
-                 lambda_camera: float = 1.0,
-                 lambda_reprojection: float = 100.0,
-                 lambda_consistency: float = 2.0):
+                 lambda_keypoint: float = 1.0,          # Reduced from 10.0
+                 lambda_mano_pose: float = 1.0,         # Keep balanced
+                 lambda_mano_shape: float = 0.1,        # Keep low for stability
+                 lambda_temporal: float = 0.1,          # Reduced from 5.0
+                 lambda_camera: float = 0.1,            # Reduced from 1.0
+                 lambda_reprojection: float = 0.001,    # MAJOR reduction from 100.0
+                 lambda_consistency: float = 0.1):      # Reduced from 2.0
         super().__init__()
 
         # Loss weights
@@ -67,9 +67,20 @@ class HaWoRLossFunction(nn.Module):
         losses = {}
         total_loss = 0.0
 
+        # Get batch and sequence dimensions for normalization
+        batch_size = None
+        seq_length = None
+        if 'hand_pose' in predictions:
+            batch_size = predictions['hand_pose'].shape[0]
+            if len(predictions['hand_pose'].shape) > 2:
+                seq_length = predictions['hand_pose'].shape[1]
+
         # 1. MANO Parameter Losses
         if 'hand_pose' in predictions and 'hand_pose' in targets:
             mano_pose_loss = self.mano_pose_loss(predictions['hand_pose'], targets['hand_pose'])
+            # Normalize by sequence length to prevent explosion with long sequences
+            if seq_length is not None and seq_length > 1:
+                mano_pose_loss = mano_pose_loss / seq_length
             losses['mano_pose'] = mano_pose_loss
             total_loss += self.lambda_mano_pose * mano_pose_loss
 
@@ -78,20 +89,29 @@ class HaWoRLossFunction(nn.Module):
             losses['mano_shape'] = mano_shape_loss
             total_loss += self.lambda_mano_shape * mano_shape_loss
 
-        # 2. 3D Keypoint Loss
+        # 2. 3D Keypoint Loss (convert to millimeters for interpretability)
         if 'hand_joints' in predictions and 'hand_joints' in targets:
             keypoint_loss = self.keypoint_3d_loss(predictions['hand_joints'], targets['hand_joints'])
-            losses['keypoint_3d'] = keypoint_loss
-            total_loss += self.lambda_keypoint * keypoint_loss
+            # Convert from meters to millimeters and normalize
+            keypoint_loss_mm = keypoint_loss * 1000.0  # Convert to mm
+            if seq_length is not None and seq_length > 1:
+                keypoint_loss_mm = keypoint_loss_mm / seq_length
+            losses['keypoint_3d'] = keypoint_loss_mm
+            total_loss += self.lambda_keypoint * keypoint_loss_mm
 
-        # 3. Reprojection Loss
+        # 3. Reprojection Loss (normalize pixel errors)
         if camera_params is not None and 'hand_joints' in predictions:
             if 'keypoints_2d' in targets:
                 reproj_loss = self.reprojection_loss(
                     predictions['hand_joints'], targets['keypoints_2d'], camera_params
                 )
-                losses['reprojection'] = reproj_loss
-                total_loss += self.lambda_reprojection * reproj_loss
+                # Normalize by image size to make it scale-invariant
+                img_size = 224.0  # ARCTIC uses 224x224 images
+                reproj_loss_norm = reproj_loss / img_size
+                if seq_length is not None and seq_length > 1:
+                    reproj_loss_norm = reproj_loss_norm / seq_length
+                losses['reprojection'] = reproj_loss_norm
+                total_loss += self.lambda_reprojection * reproj_loss_norm
 
         # 4. Temporal Consistency Loss
         temporal_loss = self.temporal_consistency_loss(predictions)
@@ -187,11 +207,12 @@ class HaWoRLossFunction(nn.Module):
             keypoints_2d: 2D keypoints [B, T, 21, 2]
             camera_params: Camera intrinsics
         """
-        # Get camera intrinsics
-        fx = camera_params.get('fx', 500.0)
-        fy = camera_params.get('fy', 500.0)
-        cx = camera_params.get('cx', 320.0)
-        cy = camera_params.get('cy', 240.0)
+        # Get camera intrinsics (ARCTIC weak perspective defaults)
+        # Based on ARCTIC parser: focal_length = 1000.0, img_res = 224
+        fx = camera_params.get('fx', 1000.0)
+        fy = camera_params.get('fy', 1000.0)
+        cx = camera_params.get('cx', 112.0)
+        cy = camera_params.get('cy', 112.0)
 
         # Project 3D joints to 2D
         x_3d = joints_3d[..., 0]  # [B, T, 21]

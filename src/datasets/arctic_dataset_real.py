@@ -25,12 +25,12 @@ class ARCTICDataset(Dataset):
                  subjects: List[str] = ['s01'],
                  sequences: Optional[List[str]] = None,
                  split: str = 'train',
-                 img_size: int = 256,
+                 img_size: int = 224,  # ARCTIC standard image size
                  sequence_length: int = 16,
                  camera_views: List[int] = [0],  # Egocentric view
                  use_augmentation: bool = True,
                  max_sequences: int = None,
-                 images_per_sequence: int = None):
+                 images_per_sequence: int = None):  # Minimum visible keypoints to consider hand visible
 
         self.data_root = Path(data_root)
         self.subjects = subjects
@@ -420,9 +420,10 @@ class ARCTICDataset(Dataset):
         T, num_joints, _ = hand_joints_3d.shape
         keypoints_2d = np.zeros((T, num_joints, 2), dtype=np.float32)
 
-        # Simplified camera model
-        fx, fy = 200.0, 200.0  # Reduced focal lengths for better projection
-        cx, cy = self.img_size // 2, self.img_size // 2  # Principal point
+        # ARCTIC weak perspective camera model
+        # Based on ARCTIC parser: focal_length = 1000.0, img_res = 224
+        fx, fy = 1000.0, 1000.0  # ARCTIC weak perspective focal length
+        cx, cy = self.img_size // 2, self.img_size // 2  # Principal point at image center
 
         for t in range(T):
             for j in range(num_joints):

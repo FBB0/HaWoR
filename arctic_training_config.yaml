@@ -25,7 +25,7 @@ arctic:
 
 # Model Configuration
 model:
-  img_size: 256
+  img_size: 224  # ARCTIC standard image size
   patch_size: 16
   backbone_type: vit_small
   pretrained: false  # Start from scratch

@@ -4,7 +4,6 @@ Real HaWoR Training Script with ARCTIC Data Integration and Visualization
 This script performs actual neural network training with comprehensive validation visualization
 """
 
-import os
 import sys
 import torch
 import torch.optim as optim
@@ -195,9 +194,10 @@ def train_hawor_real():
                     'camera_pose': batch['camera_pose']
                 }
 
-                # Camera parameters
+                # ARCTIC camera parameters (weak perspective model)
+                # Based on ARCTIC parser: focal_length = 1000.0, img_res = 224
                 camera_params = {
-                    'fx': 500.0, 'fy': 500.0, 'cx': 128.0, 'cy': 128.0
+                    'fx': 1000.0, 'fy': 1000.0, 'cx': 112.0, 'cy': 112.0
                 }
 
                 # Compute loss
@@ -207,8 +207,8 @@ def train_hawor_real():
                 # Backward pass
                 total_loss.backward()
 
-                # Gradient clipping
-                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # Gradient clipping with more aggressive limit
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
 
                 # Optimizer step
                 optimizer.step()
@@ -264,7 +264,8 @@ def train_hawor_real():
                     }
 
                     # Compute loss
-                    camera_params = {'fx': 500.0, 'fy': 500.0, 'cx': 128.0, 'cy': 128.0}
+                    # ARCTIC camera parameters (weak perspective model)
+                    camera_params = {'fx': 1000.0, 'fy': 1000.0, 'cx': 112.0, 'cy': 112.0}
                     loss_dict = loss_fn(predictions, targets, camera_params)
                     total_loss = loss_dict['total']
 

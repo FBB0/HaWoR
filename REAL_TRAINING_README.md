@@ -91,7 +91,7 @@ python train_real_hawor.py --debug
 - **Learning Rate**: 5e-5 with cosine annealing
 - **Batch Size**: 1 (memory efficient for sequences)
 - **Sequence Length**: 8 frames
-- **Image Size**: 256x256
+- **Image Size**: 224x224 (ARCTIC standard)
 - **Optimizer**: AdamW with weight decay
 - **Loss Weights**: Balanced for hand pose and camera tracking
 
