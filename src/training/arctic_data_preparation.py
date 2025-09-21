@@ -41,11 +41,16 @@ class ArcticTrainingSample:
 class ArcticDataPreparer:
     """Prepare ARCTIC data for HaWoR training"""
 
-    def __init__(self, data_root: str = "thirdparty/arctic"):
+    def __init__(self, data_root: str = "thirdparty/arctic", config: Optional[Dict] = None):
         """Initialize data preparer"""
         self.data_root = Path(data_root)
         self.arctic_root = self.data_root
+        self._config = config or {}
         print(f"  📁 ARCTIC Data Preparer initialized with root: {self.data_root}")
+        if self._config.get('use_egocentric_only'):
+            print(f"    📹 Configured for egocentric-only training")
+        elif self._config.get('camera_views'):
+            print(f"    📹 Configured for camera views: {self._config['camera_views']}")
 
     def check_data_availability(self) -> Dict:
         """Check what ARCTIC data is available"""
@@ -99,14 +104,33 @@ class ArcticDataPreparer:
                 print(f"      ❌ No camera directories found for {sequence_name}")
                 return samples
 
-            # Load images from each camera
+            # Load images from selected camera views
             all_images = []
-            for cam_dir in camera_dirs[:2]:  # Use max 2 cameras
-                images = list(cam_dir.glob("*.jpg"))
-                if images:
-                    # Take subset of images
-                    selected_images = images[:max_images//len(camera_dirs)]
-                    all_images.extend(selected_images)
+            # Get view configuration from the config
+            use_egocentric_only = getattr(self, '_config', {}).get('use_egocentric_only', True)
+            camera_views = getattr(self, '_config', {}).get('camera_views', [0])
+
+            if use_egocentric_only:
+                # Use only egocentric view (camera 0)
+                camera_views = [0]
+                print(f"      📹 Using egocentric view only (camera 0)")
+
+            print(f"      📹 Using camera views: {camera_views}")
+
+            # Load images from specified camera views
+            for view_id in camera_views:
+                cam_dir = seq_dir / str(view_id)
+                if cam_dir.exists():
+                    images = list(cam_dir.glob("*.jpg"))
+                    if images:
+                        # Take subset of images
+                        selected_images = images[:max_images//len(camera_views)]
+                        all_images.extend(selected_images)
+                        print(f"        ✅ Camera {view_id}: {len(selected_images)} images")
+                    else:
+                        print(f"        ❌ Camera {view_id}: No images found")
+                else:
+                    print(f"        ❌ Camera {view_id}: Directory not found")
 
             if not all_images:
                 print(f"      ❌ No images found for {sequence_name}")

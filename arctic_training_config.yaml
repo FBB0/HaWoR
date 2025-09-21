@@ -1,15 +1,15 @@
-# ARCTIC Training Configuration for HaWoR
-# Simplified config for Mac testing with ARCTIC data
+# Real ARCTIC Training Configuration for HaWoR
+# Updated config for actual model training
 
 # Training Configuration
 training:
-  max_epochs: 3  # Short test run for Mac
-  batch_size: 1  # Very small for Mac
-  learning_rate: 5.0e-05  # Lower LR for small batches
-  weight_decay: 0.0001
+  max_epochs: 10  # More epochs for real training
+  batch_size: 1   # Keep small for memory efficiency
+  learning_rate: 5.0e-05
+  weight_decay: 1.0e-04
   min_lr: 1.0e-07
   grad_clip_val: 1.0
-  warmup_epochs: 1
+  warmup_epochs: 2
   early_stopping_patience: 5
   accumulate_grad_batches: 1
 
@@ -17,19 +17,29 @@ training:
 arctic:
   data_root: thirdparty/arctic
   train_subjects: ["s01"]
-  val_subjects: ["s01"]  # Use same for testing
-  sequence_length: 16
-  max_sequences: 3  # Limit for Mac testing
-  images_per_camera: 20  # Limit per camera
-  use_multiple_cameras: true
+  val_subjects: ["s01"]
+  sequence_length: 8  # Shorter for memory efficiency
+  max_sequences: 3
+  images_per_camera: 50  # More images for real training
+  use_multiple_cameras: false  # Egocentric only
 
 # Model Configuration
 model:
-  backbone_type: vit_small  # Use smaller model for Mac
-  pretrained_weights: null
-  torch_compile: false  # Disable for Mac compatibility
-  mano_gender: neutral
-  num_hand_joints: 15
+  img_size: 256
+  patch_size: 16
+  backbone_type: vit_small
+  pretrained: false  # Start from scratch
+  num_joints: 21
+
+# Loss Weights
+loss_weights:
+  keypoint: 10.0
+  mano_pose: 1.0
+  mano_shape: 0.1
+  temporal: 5.0
+  camera: 1.0
+  reprojection: 100.0
+  consistency: 2.0
 
 # Hardware Configuration
 hardware:

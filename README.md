@@ -112,9 +112,15 @@ python setup_hawor.py --full-setup
 
 # 🆕 Recommended: Pretrained Model Fine-tuning (Best performance)
 python src/training/arctic_training_pipeline.py --config configs/mac_training_pretrained.yaml
-# → Uses official HaWoR pretrained models, fine-tuning on ARCTIC data
+# → Uses official HaWoR pretrained models, fine-tuning on ARCTIC egocentric data
+# → Only camera view 0 (egocentric perspective)
 # → Optimized hyperparameters for stable training
-# → Full precision for numerical stability
+
+# Alternative: Multi-view Training (More diverse data)
+python src/training/arctic_training_pipeline.py --config configs/mac_training_all_views.yaml
+# → Uses all 9 camera views (0-8) for maximum data diversity
+# → Better generalization but requires more compute
+# → More complex training dynamics
 
 # Alternative: Ultra-Stable Training (From scratch)
 python src/training/arctic_training_pipeline.py --config configs/mac_training_stable.yaml
@@ -141,9 +147,10 @@ python src/training/arctic_training_pipeline.py --config configs/mac_training_pr
 4. **Use conservative settings**: Lower LR, higher patience, smaller models
 
 **Configuration Options:**
-- `mac_training_stable.yaml` - Ultra-stable (CPU, no pretrained models)
-- `mac_training_test.yaml` - Balanced (MPS GPU, no pretrained models)
-- `mac_training_pretrained.yaml` - **RECOMMENDED** (Pretrained models, fine-tuning)
+- `mac_training_stable.yaml` - Ultra-stable (CPU, egocentric only)
+- `mac_training_test.yaml` - Balanced (MPS GPU, egocentric only)
+- `mac_training_pretrained.yaml` - **RECOMMENDED** (Pretrained, egocentric only)
+- `mac_training_all_views.yaml` - Multi-view (All 9 cameras, more diverse)
 - `arctic_training_config.yaml` - Full training (GPU recommended)
 
 **🤖 Pretrained Models Available:**
@@ -157,6 +164,17 @@ python src/training/arctic_training_pipeline.py --config configs/mac_training_pr
 - `use_pretrained: true/false` - Enable/disable pretrained model loading
 - `load_weights: true/false` - Control weight loading
 - `pretrained_weights: "path"` - Specify pretrained model path
+
+**Data Configuration:**
+- `use_egocentric_only: true/false` - Use only camera view 0 (egocentric)
+- `camera_views: [0,1,2,...]` - Specify which camera views to use
+- `max_samples_per_sequence: N` - Limit samples per sequence for testing
+
+**ARCTIC Data Structure:**
+- Each sequence has 9 camera views (0-8)
+- View 0: Egocentric (person's perspective) - **RECOMMENDED**
+- Views 1-8: External cameras (different angles)
+- All configurations default to egocentric-only for HaWoR training
 
 ### 6. Visualization Features
 

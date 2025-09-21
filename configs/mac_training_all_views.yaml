@@ -1,0 +1,71 @@
+# HaWoR Training Configuration with All Camera Views
+# Uses all 9 camera views (0-8) for maximum data diversity
+# Optimized for Mac with multi-view training
+
+# Model Configuration
+model:
+  name: "HaWoR"
+  backbone_type: "vit_base"  # Use larger model for multi-view data
+  image_size: 256
+  pretrained_weights: "./weights/hawor/checkpoints/hawor.ckpt"
+  torch_compile: false  # Disable for Mac compatibility
+  dropout: 0.1  # Lower dropout for multi-view
+  activation: "gelu"  # GELU activation
+  use_pretrained: true   # Enable pretrained model loading
+  checkpoint_path: "./weights/hawor/checkpoints/hawor.ckpt"
+  load_weights: true     # Load pretrained weights
+
+# Data Configuration
+data:
+  dataset: "ARCTIC"
+  data_root: "thirdparty/arctic"
+  train_subjects: ["s01"]
+  val_subjects: ["s02"]
+  batch_size: 1  # Smaller batch for multi-view data
+  num_workers: 1  # Fewer workers for multi-view loading
+  pin_memory: false  # Keep disabled for Mac
+  image_size: 256
+  sequence_length: 32  # Full sequences
+  augmentation: true  # Enable augmentation for diversity
+  use_egocentric_only: false  # Use all camera views
+  camera_views: [0, 1, 2, 3, 4, 5, 6, 7, 8]  # All 9 views
+  max_samples_per_sequence: 50  # More samples for multi-view
+
+# Training Configuration (Multi-view training)
+training:
+  max_epochs: 25  # More epochs for multi-view learning
+  learning_rate: 3e-5  # Lower LR for multi-view stability
+  weight_decay: 1e-4  # Standard weight decay
+  grad_clip_val: 0.3  # Less aggressive clipping for multi-view
+  accumulate_grad_batches: 2  # Effective batch size of 2
+  lr_scheduler: "step"  # Step decay for stability
+  warmup_epochs: 3  # Longer warmup for multi-view
+  patience: 8  # More patience for multi-view convergence
+
+# Loss Configuration (balanced for multi-view)
+loss:
+  keypoint_loss_weight: 1.0
+  pose_loss_weight: 0.4    # Higher for multi-view consistency
+  shape_loss_weight: 0.1   # Standard shape loss
+  global_orient_loss_weight: 0.2  # Higher for multi-view orientation
+  regularization_weight: 0.01  # L2 regularization
+
+# Logging Configuration
+logging:
+  log_every_n_steps: 5
+  save_top_k: 3  # Keep multiple checkpoints
+  monitor: "val_loss"
+  mode: "min"
+  val_check_interval: 0.5  # Validate twice per epoch
+
+# Hardware Configuration
+hardware:
+  device: "mps"  # Use Apple Silicon GPU
+  accelerator: "mps"
+  precision: 32  # Full precision for multi-view stability
+
+# Paths Configuration
+paths:
+  save_dir: "outputs/mac_training_all_views"
+  checkpoint_dir: "outputs/mac_training_all_views/checkpoints"
+  log_dir: "outputs/mac_training_all_views/logs"

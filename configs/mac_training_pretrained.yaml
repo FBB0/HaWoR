@@ -27,6 +27,9 @@ data:
   image_size: 256
   sequence_length: 32  # Full sequences
   augmentation: true  # Enable augmentation for robustness
+  use_egocentric_only: true  # Only use view 0 (egocentric)
+  camera_views: [0]  # Egocentric view only [0-8 for all views]
+  max_samples_per_sequence: null  # Use all samples (or limit for testing)
 
 # Training Configuration (Fine-tuning pretrained model)
 training:
