@@ -213,43 +213,89 @@ class ARCTICDataset(Dataset):
 
             if mano_file.exists():
                 try:
+                    # Load real ARCTIC MANO data
                     mano_data = np.load(mano_file, allow_pickle=True).item()
                     start_frame = sample['start_frame']
                     end_frame = sample['end_frame']
 
-                    # Extract MANO parameters (adapt to actual ARCTIC format)
-                    if 'pose' in mano_data:
-                        pose_data = mano_data['pose']
-                        if len(pose_data.shape) > 1 and pose_data.shape[0] > end_frame:
-                            annotations['hand_pose'] = pose_data[start_frame:end_frame]
-                        else:
-                            annotations['hand_pose'] = np.tile(pose_data[:45][None], (self.sequence_length, 1))
-                    else:
-                        annotations['hand_pose'] = np.random.randn(self.sequence_length, 45) * 0.1
+                    # Extract left hand parameters (focus on left hand)
+                    if 'left' in mano_data:
+                        left_data = mano_data['left']
 
-                    # Extract shape parameters
-                    if 'shape' in mano_data:
-                        shape_data = mano_data['shape']
-                        annotations['hand_shape'] = np.tile(shape_data[:10][None], (self.sequence_length, 1))
+                        # Extract pose parameters
+                        if 'pose' in left_data:
+                            pose_data = left_data['pose']
+                            if pose_data.shape[0] > end_frame:
+                                annotations['hand_pose'] = pose_data[start_frame:end_frame].astype(np.float32)
+                            else:
+                                # Handle short sequences by repeating
+                                repeat_count = self.sequence_length // pose_data.shape[0] + 1
+                                repeated_pose = np.tile(pose_data, (repeat_count, 1))
+                                annotations['hand_pose'] = repeated_pose[:self.sequence_length].astype(np.float32)
+                        else:
+                            raise ValueError("No pose data in left hand")
+
+                        # Extract shape parameters (constant per sequence)
+                        if 'shape' in left_data:
+                            shape_data = left_data['shape']
+                            annotations['hand_shape'] = np.tile(
+                                shape_data[:10][None], (self.sequence_length, 1)
+                            ).astype(np.float32)
+                        else:
+                            raise ValueError("No shape data in left hand")
+
+                        # Extract translation parameters
+                        if 'trans' in left_data:
+                            trans_data = left_data['trans']
+                            if trans_data.shape[0] > end_frame:
+                                annotations['hand_trans'] = trans_data[start_frame:end_frame].astype(np.float32)
+                            else:
+                                repeat_count = self.sequence_length // trans_data.shape[0] + 1
+                                repeated_trans = np.tile(trans_data, (repeat_count, 1))
+                                annotations['hand_trans'] = repeated_trans[:self.sequence_length].astype(np.float32)
+                        else:
+                            raise ValueError("No translation data in left hand")
+
+                        # Extract rotation parameters
+                        if 'rot' in left_data:
+                            rot_data = left_data['rot']
+                            if rot_data.shape[0] > end_frame:
+                                annotations['hand_rot'] = rot_data[start_frame:end_frame].astype(np.float32)
+                            else:
+                                repeat_count = self.sequence_length // rot_data.shape[0] + 1
+                                repeated_rot = np.tile(rot_data, (repeat_count, 1))
+                                annotations['hand_rot'] = repeated_rot[:self.sequence_length].astype(np.float32)
+                        else:
+                            raise ValueError("No rotation data in left hand")
+
+                        # Generate 3D hand joints from MANO parameters
+                        annotations['hand_joints'] = self._generate_hand_joints_from_mano(
+                            annotations['hand_pose'],
+                            annotations['hand_shape'],
+                            annotations['hand_trans'],
+                            annotations['hand_rot']
+                        )
+
+                        # Generate 2D keypoints by projecting 3D joints
+                        annotations['keypoints_2d'] = self._project_3d_to_2d(annotations['hand_joints'])
+
+                        # Generate camera pose (simplified for now)
+                        annotations['camera_pose'] = np.zeros((self.sequence_length, 6), dtype=np.float32)
+                        annotations['hand_valid'] = np.ones((self.sequence_length,), dtype=np.float32)
+
+                        print(f"✅ Loaded real MANO data for {sequence_name}: frames {start_frame}-{end_frame}")
+
                     else:
-                        annotations['hand_shape'] = np.random.randn(self.sequence_length, 10) * 0.1
+                        raise ValueError("No left hand data found in MANO file")
 
                 except Exception as e:
-                    print(f"Warning: Could not parse MANO file {mano_file}: {e}")
-                    annotations['hand_pose'] = np.random.randn(self.sequence_length, 45) * 0.1
-                    annotations['hand_shape'] = np.random.randn(self.sequence_length, 10) * 0.1
+                    print(f"❌ Error parsing MANO file {mano_file}: {e}")
+                    print(f"   Using fallback synthetic data")
+                    annotations = self._get_fallback_annotations()
             else:
-                # Generate synthetic data for demo
-                annotations['hand_pose'] = np.random.randn(self.sequence_length, 45) * 0.1
-                annotations['hand_shape'] = np.random.randn(self.sequence_length, 10) * 0.1
-
-            # Generate other required annotations (synthetic for demo)
-            annotations['hand_trans'] = np.random.randn(self.sequence_length, 3) * 0.1
-            annotations['hand_rot'] = np.random.randn(self.sequence_length, 3) * 0.1
-            annotations['hand_joints'] = np.random.randn(self.sequence_length, 21, 3) * 0.1
-            annotations['keypoints_2d'] = np.random.rand(self.sequence_length, 21, 2) * self.img_size
-            annotations['camera_pose'] = np.random.randn(self.sequence_length, 6) * 0.1
-            annotations['hand_valid'] = np.ones((self.sequence_length,), dtype=np.float32)
+                print(f"⚠️ MANO file not found: {mano_file}")
+                print(f"   Using fallback synthetic data")
+                annotations = self._get_fallback_annotations()
 
         except Exception as e:
             print(f"Warning: Error loading annotations: {e}")
@@ -269,6 +315,138 @@ class ARCTICDataset(Dataset):
             'camera_pose': np.zeros((self.sequence_length, 6)),
             'hand_valid': np.zeros((self.sequence_length,), dtype=np.float32)
         }
+
+    def _get_fallback_annotations(self) -> Dict[str, np.ndarray]:
+        """Get fallback synthetic annotations when real data fails"""
+        print("⚠️ Generating synthetic fallback data - training will not be meaningful!")
+        return {
+            'hand_pose': np.random.randn(self.sequence_length, 45).astype(np.float32) * 0.1,
+            'hand_shape': np.random.randn(self.sequence_length, 10).astype(np.float32) * 0.1,
+            'hand_trans': np.random.randn(self.sequence_length, 3).astype(np.float32) * 0.1,
+            'hand_rot': np.random.randn(self.sequence_length, 3).astype(np.float32) * 0.1,
+            'hand_joints': np.random.randn(self.sequence_length, 21, 3).astype(np.float32) * 0.1,
+            'keypoints_2d': np.random.rand(self.sequence_length, 21, 2).astype(np.float32) * self.img_size,
+            'camera_pose': np.random.randn(self.sequence_length, 6).astype(np.float32) * 0.1,
+            'hand_valid': np.ones((self.sequence_length,), dtype=np.float32)
+        }
+
+    def _generate_hand_joints_from_mano(self,
+                                       hand_pose: np.ndarray,
+                                       hand_shape: np.ndarray,
+                                       hand_trans: np.ndarray,
+                                       hand_rot: np.ndarray) -> np.ndarray:
+        """
+        Generate 3D hand joints from MANO parameters
+
+        Args:
+            hand_pose: [T, 45] MANO pose parameters
+            hand_shape: [T, 10] MANO shape parameters
+            hand_trans: [T, 3] Hand translation
+            hand_rot: [T, 3] Hand rotation
+
+        Returns:
+            hand_joints: [T, 21, 3] 3D hand joint positions
+        """
+
+        # This is a simplified kinematic approximation
+        # In a full implementation, you would use the actual MANO model
+
+        T = hand_pose.shape[0]
+        hand_joints = np.zeros((T, 21, 3), dtype=np.float32)
+
+        # Define basic hand structure (simplified)
+        # Joint hierarchy: wrist -> fingers
+        for t in range(T):
+            # Start with wrist at origin, then apply transforms
+            wrist_pos = hand_trans[t]  # [3]
+
+            # Generate joint positions based on pose parameters
+            # This is a very simplified approximation
+            pose_t = hand_pose[t]  # [45] = 15 joints * 3 DoF
+
+            # Wrist (joint 0)
+            hand_joints[t, 0] = wrist_pos
+
+            # Generate finger joints based on pose parameters
+            for joint_idx in range(1, 21):
+                # Get the relevant pose parameters for this joint
+                param_start = ((joint_idx - 1) // 4) * 9  # Each finger has ~9 parameters
+                param_end = min(param_start + 3, 45)
+
+                if param_end <= param_start:
+                    joint_params = np.zeros(3)
+                else:
+                    joint_params = pose_t[param_start:param_end]
+                    if len(joint_params) < 3:
+                        joint_params = np.pad(joint_params, (0, 3 - len(joint_params)))
+
+                # Simple finger structure: extend from wrist with pose-based offsets
+                finger_idx = (joint_idx - 1) // 4  # 0-4 for thumb, index, middle, ring, pinky
+                joint_in_finger = (joint_idx - 1) % 4  # 0-3 for mcp, pip, dip, tip
+
+                # Base finger direction
+                finger_dirs = np.array([
+                    [0.05, 0.0, 0.02],    # thumb
+                    [0.08, 0.0, 0.0],     # index
+                    [0.09, 0.0, -0.01],   # middle
+                    [0.08, 0.0, -0.02],   # ring
+                    [0.06, 0.0, -0.03]    # pinky
+                ])
+
+                if finger_idx < len(finger_dirs):
+                    base_dir = finger_dirs[finger_idx]
+                    # Apply pose-based rotation and extension
+                    joint_offset = base_dir * (joint_in_finger + 1) * 0.3
+                    joint_offset += joint_params * 0.02  # Small pose-based variation
+
+                    hand_joints[t, joint_idx] = wrist_pos + joint_offset
+                else:
+                    # Fallback for extra joints
+                    hand_joints[t, joint_idx] = wrist_pos + np.random.randn(3) * 0.01
+
+        return hand_joints
+
+    def _project_3d_to_2d(self, hand_joints_3d: np.ndarray) -> np.ndarray:
+        """
+        Project 3D hand joints to 2D keypoints
+
+        Args:
+            hand_joints_3d: [T, 21, 3] 3D joint positions
+
+        Returns:
+            keypoints_2d: [T, 21, 2] 2D keypoint positions
+        """
+
+        T, num_joints, _ = hand_joints_3d.shape
+        keypoints_2d = np.zeros((T, num_joints, 2), dtype=np.float32)
+
+        # Simplified camera model
+        fx, fy = 200.0, 200.0  # Reduced focal lengths for better projection
+        cx, cy = self.img_size // 2, self.img_size // 2  # Principal point
+
+        for t in range(T):
+            for j in range(num_joints):
+                x, y, z = hand_joints_3d[t, j]
+
+                # Avoid division by zero
+                z = max(z, 0.5)
+
+                # Perspective projection with scaling
+                u = (fx * x / z) + cx
+                v = (fy * y / z) + cy
+
+                # Apply reasonable bounds without hard clamping
+                if 0 <= u <= self.img_size - 1 and 0 <= v <= self.img_size - 1:
+                    keypoints_2d[t, j] = [u, v]
+                else:
+                    # For out-of-bounds points, project to a reasonable location
+                    u_scaled = cx + (x / z) * 50  # Gentler scaling
+                    v_scaled = cy + (y / z) * 50
+                    u_clamped = np.clip(u_scaled, 10, self.img_size - 10)
+                    v_clamped = np.clip(v_scaled, 10, self.img_size - 10)
+                    keypoints_2d[t, j] = [u_clamped, v_clamped]
+
+        return keypoints_2d
 
     def _apply_augmentations(self, images: np.ndarray, annotations: Dict) -> Tuple[np.ndarray, Dict]:
         """Apply data augmentations"""

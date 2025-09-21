@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Real HaWoR Training Script with ARCTIC Data Integration
-This script performs actual neural network training using real ARCTIC images and data
+Real HaWoR Training Script with ARCTIC Data Integration and Visualization
+This script performs actual neural network training with comprehensive validation visualization
 """
 
 import os
@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src.models.hawor_model import create_hawor_model
 from src.training.hawor_losses import HaWoRLossFunction
 from src.datasets.arctic_dataset_real import create_arctic_dataloaders
+from src.visualization.hand_visualization import MANOHandVisualizer
 
 
 def train_hawor_real():
@@ -143,6 +144,9 @@ def train_hawor_real():
         'learning_rate': []
     }
 
+    # Initialize visualizer
+    visualizer = MANOHandVisualizer(output_dir / "validation_visualizations")
+
     # Training loop
     print(f"\n🏋️ Starting training...")
 
@@ -222,7 +226,7 @@ def train_hawor_real():
                 print(f"❌ Error in training batch {batch_idx}: {e}")
                 continue
 
-        # Validation phase
+        # Validation phase with visualization
         model.eval()
         val_losses = []
 
@@ -270,6 +274,37 @@ def train_hawor_real():
                         'Loss': f"{total_loss.item():.4f}"
                     })
 
+                    # Create comprehensive validation visualization for first few batches
+                    if batch_idx < 2 and (epoch + 1) % 2 == 0:  # Visualize every 2nd epoch
+                        print(f"\n🎨 Creating validation visualization for batch {batch_idx}...")
+
+                        # Compute additional metrics for visualization
+                        pred_joints = outputs['left_hand_joints']  # [B, T, 21, 3]
+                        gt_joints = batch['hand_joints']           # [B, T, 21, 3]
+                        pred_pose = outputs['left_hand_pose']      # [B, T, 45]
+                        gt_pose = batch['hand_pose']               # [B, T, 45]
+
+                        # Compute validation metrics for this batch
+                        val_metrics = {
+                            'train_loss': avg_train_loss if 'avg_train_loss' in locals() else 0,
+                            'val_loss': total_loss.item(),
+                            'lr': optimizer.param_groups[0]['lr'],
+                            'epoch': epoch + 1,
+                            'batch_idx': batch_idx
+                        }
+
+                        # Create visualization
+                        visualizer.visualize_validation_batch(
+                            images=images,
+                            pred_joints=pred_joints,
+                            gt_joints=gt_joints,
+                            pred_pose=pred_pose,
+                            gt_pose=gt_pose,
+                            batch_idx=batch_idx,
+                            epoch=epoch + 1,
+                            metrics=val_metrics
+                        )
+
                 except Exception as e:
                     print(f"❌ Error in validation batch {batch_idx}: {e}")
                     continue
@@ -315,6 +350,18 @@ def train_hawor_real():
             checkpoint_path = output_dir / 'best_hawor_model.pth'
             torch.save(checkpoint, checkpoint_path)
             print(f"  💾 Saved checkpoint: {checkpoint_path}")
+
+        # Generate training progress visualization
+        if (epoch + 1) % 2 == 0:  # Every 2nd epoch
+            print(f"  📈 Generating training progress visualization...")
+            epoch_metrics_list = []
+            for i in range(len(training_metrics['train_loss'])):
+                epoch_metrics_list.append({
+                    'train_loss': training_metrics['train_loss'][i],
+                    'val_loss': training_metrics['val_loss'][i],
+                    'lr': training_metrics['learning_rate'][i]
+                })
+            visualizer.create_training_progress_visualization(epoch_metrics_list, epoch + 1)
 
     # Final results
     print(f"\n🎉 Training completed!")

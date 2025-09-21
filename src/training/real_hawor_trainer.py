@@ -24,6 +24,7 @@ from src.models.hawor_model import HaWoRModel, create_hawor_model
 from src.training.hawor_losses import HaWoRLossFunction, create_joint_weights
 from src.datasets.arctic_dataset_real import create_arctic_dataloaders
 from src.training.visualization import TrainingVisualizer
+from src.visualization.hand_visualization import MANOHandVisualizer
 
 
 class RealHaWoRTrainer:
@@ -59,8 +60,9 @@ class RealHaWoRTrainer:
             'epoch_times': []
         }
 
-        # Setup logging
+        # Setup logging and visualization
         self.visualizer = TrainingVisualizer(str(self.output_dir))
+        self.hand_visualizer = MANOHandVisualizer(str(self.output_dir / "validation_visualizations"))
 
         print(f"🚀 Real HaWoR Trainer initialized")
         print(f"📁 Output directory: {self.output_dir}")
@@ -366,6 +368,41 @@ class RealHaWoRTrainer:
 
                     val_losses.append(total_loss.item())
                     val_keypoint_errors.append(keypoint_error.item())
+
+                    # Generate 3D visualization for first batch every few epochs
+                    if batch_idx == 0 and self.current_epoch % 2 == 0:
+                        try:
+                            # Combine metrics for visualization
+                            vis_metrics = {
+                                'train_loss': self.training_metrics['train_loss'][-1] if self.training_metrics['train_loss'] else 0,
+                                'val_loss': total_loss.item(),
+                                'lr': self.optimizer.param_groups[0]['lr']
+                            }
+
+                            # Create 3D space visualization
+                            self.hand_visualizer.create_3d_space_visualization(
+                                pred_joints=pred_for_loss['hand_joints'],
+                                gt_joints=targets['hand_joints'],
+                                batch_idx=batch_idx,
+                                epoch=self.current_epoch,
+                                sample_idx=0,
+                                frame_idx=0
+                            )
+
+                            # Also create the comprehensive validation visualization
+                            self.hand_visualizer.visualize_validation_batch(
+                                images=images,
+                                pred_joints=pred_for_loss['hand_joints'],
+                                gt_joints=targets['hand_joints'],
+                                pred_pose=pred_for_loss['hand_pose'],
+                                gt_pose=targets['hand_pose'],
+                                batch_idx=batch_idx,
+                                epoch=self.current_epoch,
+                                metrics=vis_metrics
+                            )
+
+                        except Exception as viz_e:
+                            print(f"⚠️ Visualization error: {viz_e}")
 
                 except Exception as e:
                     print(f"❌ Error in validation batch {batch_idx}: {e}")
